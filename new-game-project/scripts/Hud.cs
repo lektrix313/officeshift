@@ -187,7 +187,13 @@ public partial class Hud : CanvasLayer
         if (s.HasMop) bits.Add("[mop]");
         if (s.HasBlueprint) bits.Add("[blueprints]");
         if (s.BeingWatched) bits.Add("*being watched*");
-        if (s.CaseActive) bits.Add($"HR CASE: {CaseColorPct(s.CasePct)}% evidence");
+        if (s.CaseActive)
+        {
+            string suspect = string.IsNullOrEmpty(GameMode.Instance?.CaseSuspectName)
+                ? "open case"
+                : $"{GameMode.Instance.CaseSuspectName} / {GameMode.Instance.CaseAllegation}";
+            bits.Add($"HR CASE [{suspect}]: {CaseColorPct(s.CasePct)}% evidence");
+        }
         _statusLabel.Text = string.Join("   ", bits);
 
         _promptLabel.Text = s.Prompt;

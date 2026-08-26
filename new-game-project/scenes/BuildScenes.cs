@@ -11,6 +11,16 @@ using Godot;
 /// Proof capture (deterministic movie-writer run, engine stops via --quit-after):
 ///   godot --write-movie shots/frame.png --fixed-fps 30 --quit-after 450
 ///         --script res://scenes/BuildScenes.cs ++ capture
+///   godot --write-movie shots/body_frame.png --fixed-fps 30 --quit-after 900
+///         --script res://scenes/BuildScenes.cs ++ capture body
+///   godot --write-movie shots/layout_frame.png --fixed-fps 30 --quit-after 800
+///         --script res://scenes/BuildScenes.cs ++ capture layout
+///   godot --write-movie shots/workday_frame.png --fixed-fps 30 --quit-after 1050
+///         --script res://scenes/BuildScenes.cs ++ capture workday
+///   godot --write-movie shots/reactions_frame.png --fixed-fps 30 --quit-after 800
+///         --script res://scenes/BuildScenes.cs ++ capture reactions
+///   godot --write-movie shots/object_states_frame.png --fixed-fps 30 --quit-after 500
+///         --script res://scenes/BuildScenes.cs ++ capture object_states
 /// </summary>
 public partial class BuildScenes : SceneTree
 {
@@ -122,6 +132,15 @@ public partial class BuildScenes : SceneTree
             AddCollider(root, cx, WorldData.WallHeight / 2f, cz, len, WorldData.WallHeight, wid);
         }
 
+        // Door frames are visual-only blockout markers; the gaps remain walkable.
+        foreach (var door in WorldData.DoorFrames)
+        {
+            float half = door.Width / 2f;
+            AddBox(root, door.X - half, 1.1f, door.Z, 0.14f, 2.2f, 0.22f, Color.FromHtml("596575"));
+            AddBox(root, door.X + half, 1.1f, door.Z, 0.14f, 2.2f, 0.22f, Color.FromHtml("596575"));
+            AddBox(root, door.X, 2.2f, door.Z, door.Width + 0.28f, 0.14f, 0.22f, Color.FromHtml("596575"));
+        }
+
         foreach (var p in WorldData.Props)
         {
             bool emissive = p.Color == Color.FromHtml("35f0a0") || p.Color == Color.FromHtml("0af0ff");
@@ -180,6 +199,9 @@ public partial class BuildScenes : SceneTree
             MaterialOverride = MakeMat(Color.FromHtml("555a63")),
         });
 
+        // Lets the runtime distinguish a regenerated scene from the legacy artifact.
+        root.AddChild(new Node { Name = "LayoutBlockoutV13" });
+
         var ok = SceneSaveUtil.PackAndValidate(root, "res://scenes/world.tscn");
         Quit(ok ? 0 : 1);
     }
@@ -216,6 +238,14 @@ public partial class CaptureDriver : Node
         else if (_mode == "wardrobe") WardrobeStep(gm, p);
         else if (_mode == "chaos") ChaosStep(gm, p);
         else if (_mode == "missions") MissionsStep(gm, p);
+        else if (_mode == "body") BodyStep(gm, p);
+        else if (_mode == "staff") StaffStep(gm, p);
+        else if (_mode == "frame") FrameStep(gm, p);
+        else if (_mode == "hearing") HearingStep(gm, p);
+        else if (_mode == "layout") LayoutStep(gm, p);
+        else if (_mode == "workday") WorkdayStep(gm, p);
+        else if (_mode == "reactions") ReactionsStep(gm, p);
+        else if (_mode == "object_states") ObjectStatesStep(gm, p);
         else SimStep(gm, p);
     }
 
@@ -424,5 +454,215 @@ public partial class CaptureDriver : Node
         Glide(p, _frame, 400, 490, -21.5f, -15.8f, 26f, -11.5f);
         if (_frame == 495) TapE();
         if (_frame == 497) ReleaseE();
+    }
+
+    // open the diegetic directory, then surface the most distinct staff member in-world
+    private void StaffStep(GameMode gm, PlayerController p)
+    {
+        if (_frame == 20 && !gm.Over)
+        {
+            gm.Started = true;
+            Input.MouseMode = Input.MouseModeEnum.Captured;
+        }
+        if (_frame == 45)
+            gm.Portal?.OpenStaffDirectory();
+        if (_frame == 240)
+            gm.Portal?.Close();
+        if (_frame == 270)
+        {
+            var keith = gm.Npcs.Find(n => n.NpcName == "Keith");
+            if (keith != null)
+            {
+                p.GlobalPosition = keith.Pos + new Vector3(0.9f, 0f, 0.9f);
+                p.Yaw = System.MathF.Atan2(-(keith.Pos.X - p.FeetPos.X), -(keith.Pos.Z - p.FeetPos.Z));
+            }
+        }
+        if (_frame == 300)
+            gm.TryStartTalk();
+    }
+
+    // file a murder allegation against Tom → watch the office feed distort it → HR removes him
+    private void FrameStep(GameMode gm, PlayerController p)
+    {
+        if (_frame == 20 && !gm.Over)
+        {
+            gm.Started = true;
+            Input.MouseMode = Input.MouseModeEnum.Captured;
+        }
+        if (_frame == 50)
+        {
+            gm.Portal?.Open();
+            gm.Portal?.FileReportForCapture(
+                "Tom",
+                "A MURDER",
+                "He was seen near the server room before the incident and has been selling silence for months.");
+        }
+        if (_frame == 160)
+            gm.Portal?.OpenStaffDirectory();
+        if (_frame == 320)
+            gm.Portal?.Close();
+    }
+
+    // compresses the one-hour workday into a short capture while staff cycle through the FSM
+    private void WorkdayStep(GameMode gm, PlayerController p)
+    {
+        if (_frame == 20 && !gm.Over)
+        {
+            gm.Started = true;
+            gm.WorkdayTimeScale = 120f;
+            Input.MouseMode = Input.MouseModeEnum.Captured;
+        }
+        if (_frame == 30) gm.Toast("WORKDAY CAPTURE: 09:00 to 17:00 compressed into this recording.", ToastKind.Info);
+        if (_frame == 920) gm.WorkdayTimeScale = 1f;
+    }
+
+    // player crime, then an ambient fire alarm; inspect activation/action/cooldown telemetry
+    private void ReactionsStep(GameMode gm, PlayerController p)
+    {
+        if (_frame == 20 && !gm.Over)
+        {
+            gm.Started = true;
+            Input.MouseMode = Input.MouseModeEnum.Captured;
+        }
+        if (_frame == 45)
+        {
+            var victim = gm.Npcs.Find(n => n.NpcName == "Keith");
+            if (victim != null)
+            {
+                p.GlobalPosition = victim.Pos + new Vector3(0.8f, 0f, 0f);
+                gm.OnBonkLanded(victim, Vector3.Right);
+            }
+        }
+        if (_frame == 150) gm.PullFireAlarm();
+        if (_frame == 260) gm.Portal?.OpenStaffDirectory();
+        if (_frame == 700) gm.Portal?.Close();
+    }
+
+    // trigger printer/computer/door state changes and open the staff telemetry view
+    private void ObjectStatesStep(GameMode gm, PlayerController p)
+    {
+        if (_frame == 20 && !gm.Over)
+        {
+            gm.Started = true;
+            Input.MouseMode = Input.MouseModeEnum.Captured;
+        }
+        if (_frame == 45) gm.SetOfficeObjectState("printer", OfficeObjectState.OutOfPaper, true);
+        if (_frame == 80) gm.SetOfficeObjectState("printer", OfficeObjectState.Jammed, false);
+        if (_frame == 115) gm.SetOfficeObjectState("computer", OfficeObjectState.Glitchy, true);
+        if (_frame == 150) gm.SetOfficeObjectState("computer", OfficeObjectState.ITCalled, false);
+        if (_frame == 190) gm.TryAccessOfficeObject("door", "wrong-card");
+        if (_frame == 230) gm.SetOfficeObjectState("coffeemaker", OfficeObjectState.Brewing, true);
+        if (_frame == 280) gm.SetOfficeObjectState("watercooler", OfficeObjectState.InUse, false);
+        if (_frame == 330) gm.Portal?.OpenStaffDirectory();
+        if (_frame == 480) gm.Portal?.Close();
+    }
+
+    // walk the camera through the new meeting rooms and HR suite blockout
+    private void LayoutStep(GameMode gm, PlayerController p)
+    {
+        if (_frame == 20 && !gm.Over)
+        {
+            gm.Started = true;
+            Input.MouseMode = Input.MouseModeEnum.Captured;
+        }
+
+        Glide(p, _frame, 20, 110, 0f, 18.5f, -25f, 13f);
+        Glide(p, _frame, 120, 220, -25f, 13f, -25f, 19.5f);
+        Glide(p, _frame, 230, 330, -25f, 19.5f, -12f, 13f);
+        Glide(p, _frame, 340, 440, -12f, 13f, -12f, 19.5f);
+        Glide(p, _frame, 450, 550, -12f, 19.5f, 13f, 13f);
+        Glide(p, _frame, 560, 660, 13f, 13f, 13.5f, 19.5f);
+        Glide(p, _frame, 670, 760, 13.5f, 19.5f, 0f, 18.5f);
+    }
+
+    // file a case, challenge the contradictory witness, then appeal before HR removes Tom
+    private void HearingStep(GameMode gm, PlayerController p)
+    {
+        if (_frame == 20 && !gm.Over)
+        {
+            gm.Started = true;
+            Input.MouseMode = Input.MouseModeEnum.Captured;
+        }
+        if (_frame == 45)
+        {
+            gm.Portal?.Open();
+            gm.Portal?.FileReportForCapture("Tom", "A MURDER", "Tom's stapler budget has always been suspicious.");
+        }
+        if (_frame == 80)
+            gm.OpenHearing();
+        if (_frame == 120)
+            gm.ChallengeTestimony(1);
+        if (_frame == 150)
+            gm.AppealCase();
+        if (_frame == 190)
+            gm.Portal?.OpenStaffDirectory();
+    }
+
+    // dispose Keith → hide Susan until discovery/police interview → forge Janet's resignation
+    private void BodyStep(GameMode gm, PlayerController p)
+    {
+        if (_frame == 20 && !gm.Over)
+        {
+            gm.Started = true;
+            Input.MouseMode = Input.MouseModeEnum.Captured;
+        }
+
+        if (_frame == 35)
+        {
+            var keith = gm.Npcs.Find(n => n.NpcName == "Keith");
+            var chute = gm.WorldRef?.HideSpots.Find(s => s.Id == "chute");
+            if (keith != null && chute != null)
+            {
+                p.GlobalPosition = keith.Pos + new Vector3(0.8f, 0f, 0f);
+                gm.OnBonkLanded(keith, Vector3.Right);
+                p.Carrying = keith;
+                gm.DisposeBody(keith, chute);
+                p.GlobalPosition = new Vector3(11.5f, 0f, -20.5f);
+            }
+        }
+
+        if (_frame == 90)
+        {
+            var susan = gm.Npcs.Find(n => n.NpcName == "Susan");
+            var lamp = gm.WorldRef?.HideSpots.Find(s => s.Id == "lamp");
+            if (susan != null && lamp != null)
+            {
+                p.GlobalPosition = susan.Pos + new Vector3(0.8f, 0f, 0f);
+                gm.OnBonkLanded(susan, Vector3.Right);
+                lamp.SmellDelay = 3f;
+                p.Carrying = susan;
+                gm.HideBody(susan, lamp);
+                p.Carrying = null;
+                p.GlobalPosition = new Vector3(15f, 0f, -15f);
+            }
+        }
+
+        if (_frame == 120)
+        {
+            var janet = gm.Npcs.Find(n => n.NpcName == "Janet");
+            var closet = gm.WorldRef?.HideSpots.Find(s => s.Id == "closet");
+            if (janet != null && closet != null)
+            {
+                p.GlobalPosition = janet.Pos + new Vector3(0.8f, 0f, 0f);
+                gm.OnBonkLanded(janet, Vector3.Right);
+                closet.SmellDelay = 999f;
+                p.Carrying = janet;
+                gm.HideBody(janet, closet);
+                p.Carrying = null;
+            }
+        }
+
+        // The smell clock selects a nearby NPC, who walks to the hidden body.
+        // Answer every interview prompt once it opens so the capture reaches the next beat.
+        if (gm.Interview?.IsOpen == true)
+            gm.Interview.SubmitForCapture("I was at my desk reviewing the morning meeting notes and answering email.");
+
+        if (_frame == 660)
+        {
+            var janet = gm.Npcs.Find(n => n.NpcName == "Janet");
+            if (janet != null) gm.OpenResignation(janet);
+        }
+        if (_frame == 690)
+            gm.Portal?.SubmitForgeForCapture("I am relocating for a family opportunity and would like to resign effective immediately. Thank you for everything.");
     }
 }

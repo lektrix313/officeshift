@@ -25,8 +25,10 @@ public partial class NpcBody : Node3D
 
     private string _idleClip = "";
     private string _walkClip = "";
+    private string _workdayClip = "";
     private string _currentClip = "";
     private bool _runRequest;
+    private WorkdayState _workdayState = WorkdayState.Arriving;
 
     private Label3D? _nameTag;
     private MeshInstance3D? _susBar;
@@ -37,9 +39,11 @@ public partial class NpcBody : Node3D
         NoDepthTest = true,
     };
     private Label3D? _emote;
+    private Label3D? _activityTag;
     private Label3D? _zzz;
     private float _bobTime;
     private bool _sleeping;
+    private WorkdayState _lastVisualState = WorkdayState.Arriving;
     private float _sleepY = 2.7f;
 
     public override void _Ready()
@@ -189,7 +193,9 @@ public partial class NpcBody : Node3D
     {
         _runRequest = run;
         if (Anim == null || !UsingRiggedModel) return;
-        string target = moving && _walkClip.Length > 0 ? _walkClip : _idleClip.Length > 0 ? _idleClip : "";
+        string target = moving && _walkClip.Length > 0
+            ? _walkClip
+            : _workdayClip.Length > 0 ? _workdayClip : _idleClip;
         if (target.Length == 0 || target == _currentClip) return;
         if (Anim.HasAnimation(target))
         {
@@ -198,10 +204,139 @@ public partial class NpcBody : Node3D
         }
     }
 
+    /// <summary>Sets the visible workday activity and selects the closest authored animation clip.</summary>
+    public void SetWorkdayState(WorkdayState state)
+    {
+        _workdayState = state;
+        _workdayClip = FindWorkdayClip(state);
+        SetActivityTag(WorkdayLabel(state));
+        if (state == WorkdayState.FeelingSleepy)
+            ShowSleeping(true);
+        else if (_sleeping && state != WorkdayState.PanicAttack)
+            ShowSleeping(false);
+
+        if (Anim != null && !string.IsNullOrEmpty(_workdayClip) && _currentClip != _workdayClip)
+        {
+            Anim.Play(_workdayClip, 0.18);
+            _currentClip = _workdayClip;
+        }
+    }
+
+    private string FindWorkdayClip(WorkdayState state)
+    {
+        if (Anim == null) return "";
+        string[] tokens = state switch
+        {
+            WorkdayState.WalkingToPrinter or WorkdayState.MeetingWalk or WorkdayState.WalkingThinking or WorkdayState.AnxiousWalking => new[] { "walk" },
+            WorkdayState.WorkingAtDesk or WorkdayState.DepressedWorking or WorkdayState.HappyWorking or WorkdayState.WorriedWorking or WorkdayState.DistractedWorking or WorkdayState.AnnoyedWorking or WorkdayState.PickingUpSlack or WorkdayState.SuspiciousWorking or WorkdayState.NotPayingAttention or WorkdayState.EngrossedWorking or WorkdayState.AnxiousWorking => new[] { "work", "typing", "write", "idle" },
+            WorkdayState.Reading => new[] { "read", "book", "idle" },
+            WorkdayState.WaitingAtPrinter or WorkdayState.Printing or WorkdayState.PrinterBroken => new[] { "print", "work", "idle" },
+            WorkdayState.DoomScrolling => new[] { "phone", "idle" },
+            WorkdayState.PhoneCall => new[] { "phone", "talk", "idle" },
+            WorkdayState.PanicAttack => new[] { "panic", "idle" },
+            WorkdayState.OnBreak or WorkdayState.WaterCooler or WorkdayState.CoffeeBreak or WorkdayState.Meeting or WorkdayState.AnxiousMeeting => new[] { "talk", "idle" },
+            WorkdayState.Speed or WorkdayState.Ecstasy => new[] { "run", "walk", "idle" },
+            _ => new[] { "idle" },
+        };
+        foreach (string clip in Anim.GetAnimationList())
+        {
+            string low = clip.ToLowerInvariant();
+            foreach (string token in tokens)
+                if (low.Contains(token) && (!low.Contains("idle") || token == "idle")) return clip;
+        }
+        return _idleClip;
+    }
+
+    private void SetActivityTag(string text)
+    {
+        if (_activityTag == null)
+        {
+            _activityTag = new Label3D
+            {
+                FontSize = 22,
+                OutlineSize = 8,
+                Modulate = Color.FromHtml("d6e0dc"),
+                Position = new Vector3(0f, 2.58f, 0f),
+                Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
+                PixelSize = 0.0018f,
+            };
+            AddChild(_activityTag);
+        }
+        _activityTag.Text = text;
+        _activityTag.Modulate = WorkdayColor(_workdayState);
+    }
+
+    private static string WorkdayLabel(WorkdayState state) => state switch
+    {
+        WorkdayState.WorkingAtDesk => "working at desk",
+        WorkdayState.WalkingToPrinter => "walking to printer",
+        WorkdayState.WaitingAtPrinter => "waiting at printer",
+        WorkdayState.Printing => "printing",
+        WorkdayState.PrinterBroken => "printer not working",
+        WorkdayState.Toilet => "in the toilet",
+        WorkdayState.OnBreak => "on break",
+        WorkdayState.MeetingWalk => "walking to meeting",
+        WorkdayState.Meeting => "in meeting",
+        WorkdayState.AnxiousMeeting => "anxious / meeting",
+        WorkdayState.PhoneCall => "on phone call",
+        WorkdayState.DoomScrolling => "doom scrolling",
+        WorkdayState.WaterCooler => "at water cooler",
+        WorkdayState.CoffeeBreak => "coffee break",
+        WorkdayState.StationaryUse => "stationary use",
+        WorkdayState.WalkingThinking => "walking / thinking",
+        WorkdayState.DepressedWorking => "working / depressed",
+        WorkdayState.HappyWorking => "working / happy",
+        WorkdayState.WorriedWorking => "working / worried",
+        WorkdayState.DistractedWorking => "working / distracted",
+        WorkdayState.AnnoyedWorking => "working / annoyed",
+        WorkdayState.PickingUpSlack => "picking up slack",
+        WorkdayState.SuspiciousWorking => "working / suspicious",
+        WorkdayState.NotPayingAttention => "not paying attention",
+        WorkdayState.EngrossedWorking => "engrossed at computer",
+        WorkdayState.FeelingSick => "feeling sick",
+        WorkdayState.FeelingHorny => "feeling horny",
+        WorkdayState.FeelingCurious => "feeling curious",
+        WorkdayState.FeelingSleepy => "feeling sleepy",
+        WorkdayState.FeelingDrunk => "feeling drunk",
+        WorkdayState.Speed => "on speed",
+        WorkdayState.Stoned => "stoned",
+        WorkdayState.LSD => "on LSD",
+        WorkdayState.KHole => "in a k-hole",
+        WorkdayState.Ecstasy => "on ecstasy",
+        WorkdayState.AnxiousWalking => "anxious / walking",
+        WorkdayState.AnxiousWorking => "anxious / working",
+        WorkdayState.PanicAttack => "panic attack",
+        WorkdayState.Reading => "reading",
+        _ => "arriving",
+    };
+
+    private static Color WorkdayColor(WorkdayState state) => state switch
+    {
+        WorkdayState.HappyWorking => Color.FromHtml("67d99b"),
+        WorkdayState.DepressedWorking => Color.FromHtml("8c98aa"),
+        WorkdayState.WorriedWorking or WorkdayState.AnxiousWorking or WorkdayState.AnxiousWalking or WorkdayState.AnxiousMeeting => Color.FromHtml("ffd76a"),
+        WorkdayState.AnnoyedWorking or WorkdayState.PanicAttack => Color.FromHtml("ff7c6e"),
+        WorkdayState.Speed or WorkdayState.Ecstasy or WorkdayState.LSD => Color.FromHtml("d995dc"),
+        _ => Color.FromHtml("d6e0dc"),
+    };
+
     public override void _Process(double delta)
     {
         if (Anim != null && _walkClip.Length > 0 && Anim.CurrentAnimation == _walkClip)
             Anim.SpeedScale = _runRequest ? 1.7f : 1.0f;
+
+        // Placeholder rigs still communicate the workday mood through subtle motion.
+        if (_workdayState != _lastVisualState && Visual != null && ActiveRagdoll == null)
+        {
+            _lastVisualState = _workdayState;
+            Visual.Rotation = Vector3.Zero;
+        }
+        if (Visual != null && ActiveRagdoll == null && _workdayState != WorkdayState.WorkingAtDesk)
+        {
+            float sway = System.MathF.Sin(_bobTime += (float)delta * (_workdayState is WorkdayState.Speed or WorkdayState.Ecstasy ? 8f : 2f)) *
+                (_workdayState is WorkdayState.DistractedWorking or WorkdayState.DoomScrolling or WorkdayState.Stoned ? 0.025f : 0.008f);
+            Visual.Rotation = new Vector3(0f, sway, 0f);
+        }
 
         // zzz bobbing (port of updateVisuals zzz line)
         if (_zzz != null && _sleeping)

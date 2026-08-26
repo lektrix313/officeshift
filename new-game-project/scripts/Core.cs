@@ -9,13 +9,123 @@ public enum Archetype { Snoop, Slob, Gossip, Grifter, Drone, Guard }
 
 public enum NpcState { Routine, Curious, Panic, Report, Hunt, Seated, Out, Hidden }
 
+/// <summary>Normal 9-5 activity state. Consequence states remain in NpcState and interrupt this layer.</summary>
+public enum WorkdayState
+{
+    Arriving,
+    WorkingAtDesk,
+    WalkingToPrinter,
+    WaitingAtPrinter,
+    Printing,
+    PrinterBroken,
+    Toilet,
+    OnBreak,
+    MeetingWalk,
+    Meeting,
+    AnxiousMeeting,
+    PhoneCall,
+    DoomScrolling,
+    WaterCooler,
+    CoffeeBreak,
+    StationaryUse,
+    WalkingThinking,
+    DepressedWorking,
+    HappyWorking,
+    WorriedWorking,
+    DistractedWorking,
+    AnnoyedWorking,
+    PickingUpSlack,
+    SuspiciousWorking,
+    NotPayingAttention,
+    EngrossedWorking,
+    FeelingSick,
+    FeelingHorny,
+    FeelingCurious,
+    FeelingSleepy,
+    FeelingDrunk,
+    Speed,
+    Stoned,
+    LSD,
+    KHole,
+    Ecstasy,
+    AnxiousWalking,
+    AnxiousWorking,
+    PanicAttack,
+    Reading,
+}
+
 public enum EvidenceKind { Blood, Body, Noise }
+
+/// <summary>Shared consequence/workday stimulus categories consumed by every NPC.</summary>
+public enum NpcStimulusKind
+{
+    PlayerCrime,
+    PlayerNoise,
+    BodyFound,
+    BloodFound,
+    Stink,
+    FireAlarm,
+    CoffeeBreak,
+    PrinterFailure,
+    MeetingPressure,
+    PhoneCall,
+    WorkdayActivity,
+    ObjectFailure,
+    AccessDenied,
+    ITCalled,
+    ComfortEvent,
+    Rumor,
+}
+
+/// <summary>Action selected after an NPC's activation threshold is crossed.</summary>
+public enum NpcReactionAction
+{
+    Ignore,
+    Observe,
+    Investigate,
+    Panic,
+    Report,
+    Flee,
+    GoToCoffee,
+    GoToPrinter,
+    GoToMeeting,
+    Gossip,
+    Complain,
+    SeekHelp,
+    Recover,
+    UseObject,
+}
+
+/// <summary>One event entering the consequence engine. Player-led and ambient events share this shape.</summary>
+public sealed class NpcStimulus
+{
+    public required string Id;
+    public required NpcStimulusKind Kind;
+    public required Vector3 Position;
+    public float Intensity = 1f;
+    public bool PlayerLed;
+    public string Subject = "";
+    public string Description = "";
+    public string ObjectId = "";
+    public string ObjectDepartment = "";
+    public OfficeObjectType? ObjectType;
+    public OfficeObjectState? ObjectState;
+    public float StressDelta;
+    public float ComfortDelta;
+    public NpcReactionAction PreferredAction = NpcReactionAction.Observe;
+    public object? EvidenceRef;
+    public EvidenceKind? EvidenceKind;
+    public float Radius = 18f;
+    /// <summary>The NPC actively using the object; this user may react outside the ambient radius.</summary>
+    public NpcBrain? ActiveUser;
+    public NpcBrain? Source;
+}
 
 public enum ToastKind { Info, Warn, Chaos, Success }
 
 public enum ChannelMode { None, Terminal, Mop, Coffee, Microwave, Tape, Photo }
 
-public enum RoomId { Server, Printer, Break, Closet, Reception, Floor }
+public enum RoomId { Server, Printer, Break, Closet, Reception, MeetingA, MeetingB, Hr, Floor }
 
 /// <summary>XZ-plane axis-aligned box (ported from types.ts AABB).</summary>
 public readonly record struct Aabb2(float MinX, float MinZ, float MaxX, float MaxZ)
@@ -52,10 +162,38 @@ public sealed class NoiseRef
     public bool Expired;
 }
 
+public enum MemoryKind { Witness, Rumor, Forged }
+
+/// <summary>One staff member's fallible account of an office incident.</summary>
+public sealed class StaffMemory
+{
+    public required string Subject;
+    public required string Incident;
+    public required string Narrative;
+    public required Vector3 Location;
+    public required float Confidence;
+    public MemoryKind Kind;
+    public bool Shared;
+    public float Age;
+}
+
+/// <summary>A witness statement assembled from one staff member's imperfect memory.</summary>
+public sealed class CaseTestimony
+{
+    public required string Witness;
+    public required string Suspect;
+    public required string Statement;
+    public required string LocationClaim;
+    public required float Confidence;
+    public bool Contradictory;
+    public bool Challenged;
+    public bool Coached;
+}
+
 /// <summary>Zone ids usable in chat/email directives, mapped to points by GameMode.</summary>
 public static class DirectiveZones
 {
-    public static readonly string[] Valid = { "breakroom", "server", "printer", "reception", "closet", "desk", "player" };
+    public static readonly string[] Valid = { "breakroom", "server", "printer", "reception", "closet", "meeting_a", "meeting_b", "hr", "desk", "player" };
 
     public static bool IsValid(string? z) => z != null && System.Array.IndexOf(Valid, z.ToLowerInvariant()) >= 0;
 }
@@ -88,7 +226,8 @@ public static class Specs
 /// <summary>All tunables ported from game.ts top-level consts.</summary>
 public static class Bal
 {
-    public const float ShiftSeconds = 360f;
+    // One in-game working day takes one hour of realtime (compressed 9:00-17:00 clock).
+    public const float ShiftSeconds = 3600f;
     public const float InteractRange = 2.4f;
     public const float BonkRange = 2.1f;
     public const float BonkCooldown = 0.8f;
@@ -205,6 +344,7 @@ public sealed class HideSpotState
     public required string Action;
     public required Vector3 Pos;
     public required int Capacity;
+    public required float SmellDelay;
     public System.Collections.Generic.List<string> Occupants { get; } = new();
 
     public bool HasRoom => Occupants.Count < Capacity;

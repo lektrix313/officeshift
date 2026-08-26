@@ -10,6 +10,23 @@ public sealed record PersonaSheet(
     string Quirk,
     string Greeting);
 
+/// <summary>Stable Big Five-lite values. 0 = low, 1 = high; values drive AI behavior and the staff directory.</summary>
+public sealed record PersonalityProfile(
+    float Conscientiousness,
+    float Agreeableness,
+    float Extraversion,
+    float Neuroticism,
+    float Openness)
+{
+    public string Summary =>
+        $"C {Conscientiousness:P0} · A {Agreeableness:P0} · E {Extraversion:P0} · N {Neuroticism:P0} · O {Openness:P0}";
+
+    public float SuspicionSensitivity => 0.75f + Neuroticism * 0.5f;
+    public float PanicDurationMultiplier => 1.2f - Neuroticism * 0.45f;
+    public float ForgivenessMultiplier => 0.75f + Agreeableness * 0.5f;
+    public float GossipRadiusMultiplier => 0.8f + Extraversion * 0.45f;
+}
+
 public static class Personas
 {
     public static readonly Dictionary<string, PersonaSheet> ByName = new()
@@ -49,9 +66,88 @@ public static class Personas
             "speaks in procedure", "Everything by the book. State your business."),
     };
 
+    public static readonly Dictionary<string, PersonalityProfile> Profiles = new()
+    {
+        ["Keith"] = new(0.96f, 0.28f, 0.36f, 0.88f, 0.82f),
+        ["Dave"] = new(0.18f, 0.86f, 0.22f, 0.18f, 0.16f),
+        ["Susan"] = new(0.58f, 0.72f, 0.98f, 0.64f, 0.74f),
+        ["Tom"] = new(0.44f, 0.30f, 0.78f, 0.48f, 0.91f),
+        ["Greg"] = new(0.72f, 0.42f, 0.38f, 0.81f, 0.35f),
+        ["Janet"] = new(0.67f, 0.76f, 0.34f, 0.93f, 0.62f),
+        ["Priya"] = new(0.79f, 0.37f, 0.69f, 0.33f, 0.58f),
+        ["Margaret"] = new(0.91f, 0.67f, 0.61f, 0.28f, 0.48f),
+        ["Linda"] = new(0.84f, 0.74f, 0.46f, 0.25f, 0.87f),
+        ["Barry"] = new(0.29f, 0.91f, 0.83f, 0.14f, 0.77f),
+        ["Briggs"] = new(0.99f, 0.24f, 0.18f, 0.57f, 0.29f),
+    };
+
     public static PersonaSheet For(string name) =>
         ByName.TryGetValue(name, out var p) ? p
         : new PersonaSheet(name, "Coworker", "ordinary", "nothing interesting", "plain-spoken", "Hey.");
+
+    public static PersonalityProfile ProfileFor(string name) =>
+        Profiles.TryGetValue(name, out var profile)
+            ? profile
+            : new PersonalityProfile(0.5f, 0.5f, 0.5f, 0.5f, 0.5f);
+
+    public static string BehavioralTell(string name)
+    {
+        var p = ProfileFor(name);
+        if (p.Conscientiousness > 0.85f) return "notices moved objects and missing procedure";
+        if (p.Agreeableness > 0.82f) return "gives you the benefit of the doubt";
+        if (p.Extraversion > 0.82f) return "spreads anything interesting across the floor";
+        if (p.Neuroticism > 0.82f) return "panics quickly when evidence appears";
+        if (p.Openness < 0.25f) return "dismisses odd noises as office nonsense";
+        return "keeps a measured eye on the room";
+    }
+
+    // ---- random replacement generation ----
+    private static readonly string[] HireNames =
+    {
+        "Derek", "Ashley", "Marcus", "Chloe", "Dev", "Tanya", "Oliver", "Bianca",
+        "Raj", "Ingrid", "Pablo", "Yuki", "Fatima", "Gustav", "Renata", "Kwame",
+    };
+    private static readonly string[] TraitPool =
+    {
+        "aggressively normal", "suspiciously cheerful", "allergic to small talk",
+        "narrates their own life", "has never blinked on camera", "types in ALL CAPS",
+        "whispers everything", "laughs one beat too late", "owns 14 identical ties",
+    };
+    private static readonly string[] SecretPool =
+    {
+        "is definitely in witness protection", "sleeps in the server room on weekends",
+        "thinks this company makes phones (it does not)", "is the pigeon's legal guardian",
+        "has been pre-writing their memoir since day one", "is three raccoons in a lanyard",
+    };
+    private static readonly string[] QuirkPool =
+    {
+        "ends every sentence with 'per my last email'", "smells faintly of ozone",
+        "claps when planes fly over", "refuses to use the letter Q", "stands exactly 1.2 meters from walls",
+    };
+    private static readonly Random Rng = new();
+
+    /// <summary>Random-generated replacement hire: new name + rolled personality.</summary>
+    public static PersonalityProfile RollProfile() => new(
+        0.2f + (float)Rng.NextDouble() * 0.75f,
+        0.2f + (float)Rng.NextDouble() * 0.75f,
+        0.2f + (float)Rng.NextDouble() * 0.75f,
+        0.2f + (float)Rng.NextDouble() * 0.75f,
+        0.2f + (float)Rng.NextDouble() * 0.75f);
+
+    public static PersonaSheet RandomSheet()
+    {
+        string name = HireNames[Rng.Next(HireNames.Length)];
+        while (ByName.ContainsKey(name) || GameMode.Instance?.Npcs.Any(n => n.NpcName == name) == true)
+            name = HireNames[Rng.Next(HireNames.Length)];
+        Profiles[name] = RollProfile();
+        return new PersonaSheet(
+            name,
+            "New Hire",
+            TraitPool[Rng.Next(TraitPool.Length)],
+            SecretPool[Rng.Next(SecretPool.Length)],
+            QuirkPool[Rng.Next(QuirkPool.Length)],
+            "Hi! I'm new. Where do we file the existential dread?");
+    }
 
     /// <summary>Live world context line injected into every prompt.</summary>
     public static string ContextLine(NpcBrain n, GameMode gm)
@@ -59,6 +155,7 @@ public static class Personas
         var bits = new List<string>
         {
             $"You are {n.NpcName}, the {n.Spec.Label}.",
+            $"Personality: {For(n.NpcName).Traits}. Behavioral tell: {BehavioralTell(n.NpcName)}.",
             $"Current mood: suspicion {n.Suspicion:F0}/100 toward the new employee.",
         };
         if (gm.Player != null)

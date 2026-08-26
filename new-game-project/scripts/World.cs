@@ -21,6 +21,11 @@ public partial class World : Node3D
 
     public override void _Ready()
     {
+        // world.tscn is generated. Until the Mono builder can refresh the checked-in
+        // artifact, patch only legacy scenes at runtime; regenerated scenes carry a marker.
+        if (GetNodeOrNull<Node>("LayoutBlockoutV13") == null)
+            ApplyLegacyLayoutFallback();
+
         // walls: collide + block vision
         foreach (var w in WorldData.Walls)
         {
@@ -71,11 +76,105 @@ public partial class World : Node3D
                 Action = def.Action,
                 Pos = def.Pos,
                 Capacity = def.Capacity,
+                SmellDelay = def.SmellDelay,
             });
         }
 
         // waypoints
         foreach (var kv in WorldData.Waypoints) _waypoints[kv.Key] = kv.Value;
+    }
+
+    private void ApplyLegacyLayoutFallback()
+    {
+        RemoveLegacyPodGeometry();
+
+        // The legacy scene already contains the first 16 wall segments and first 28 props.
+        for (int i = 16; i < WorldData.Walls.Length; i++)
+        {
+            var w = WorldData.Walls[i];
+            float cx = (w.X1 + w.X2) / 2f;
+            float cz = (w.Z1 + w.Z2) / 2f;
+            float len = System.MathF.Max(System.MathF.Abs(w.X2 - w.X1), 0.3f);
+            float wid = System.MathF.Max(System.MathF.Abs(w.Z2 - w.Z1), 0.3f);
+            AddBlockoutBox(cx, WorldData.WallHeight / 2f, cz, len, WorldData.WallHeight, wid, Color.FromHtml("d8d4cc"), true);
+        }
+
+        foreach (var door in WorldData.DoorFrames)
+        {
+            float half = door.Width / 2f;
+            AddBlockoutBox(door.X - half, 1.1f, door.Z, 0.14f, 2.2f, 0.22f, Color.FromHtml("596575"), false);
+            AddBlockoutBox(door.X + half, 1.1f, door.Z, 0.14f, 2.2f, 0.22f, Color.FromHtml("596575"), false);
+            AddBlockoutBox(door.X, 2.2f, door.Z, door.Width + 0.28f, 0.14f, 0.22f, Color.FromHtml("596575"), false);
+        }
+
+        foreach (var p in WorldData.LayoutProps)
+        {
+            bool emissive = p.Color == Color.FromHtml("35f0a0") || p.Color == Color.FromHtml("0af0ff");
+            AddBlockoutBox(p.X, p.Y, p.Z, p.W, p.H, p.D, p.Color, p.Solid, emissive);
+        }
+
+        foreach (var pc in WorldData.PodCenters)
+        {
+            foreach (var part in WorldData.PodPartitions(pc))
+                AddBlockoutBox(part.X, part.Y, part.Z, part.W, part.H, part.D, part.Color, true);
+        }
+    }
+
+    private void RemoveLegacyPodGeometry()
+    {
+        foreach (var child in GetChildren())
+        {
+            if (child is MeshInstance3D mesh && mesh.Mesh is BoxMesh box && IsLegacyPodSize(box.Size))
+            {
+                child.Free();
+                continue;
+            }
+
+            if (child is StaticBody3D body)
+            {
+                foreach (var shapeNode in body.GetChildren())
+                {
+                    if (shapeNode is CollisionShape3D shape && shape.Shape is BoxShape3D shapeBox && IsLegacyPodSize(shapeBox.Size))
+                    {
+                        body.Free();
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    private static bool IsLegacyPodSize(Vector3 size) =>
+        (Mathf.IsEqualApprox(size.X, 5.4f) && Mathf.IsEqualApprox(size.Y, 1.4f) && Mathf.IsEqualApprox(size.Z, 0.12f)) ||
+        (Mathf.IsEqualApprox(size.X, 0.12f) && Mathf.IsEqualApprox(size.Y, 1.4f) && Mathf.IsEqualApprox(size.Z, 4f));
+
+    private void AddBlockoutBox(float x, float y, float z, float w, float h, float d, Color color, bool solid, bool emissive = false)
+    {
+        var mesh = new MeshInstance3D
+        {
+            Mesh = new BoxMesh { Size = new Vector3(w, h, d) },
+            Position = new Vector3(x, y, z),
+            MaterialOverride = MakeMaterial(color, emissive),
+            CastShadow = h > 0.4f ? GeometryInstance3D.ShadowCastingSetting.On : GeometryInstance3D.ShadowCastingSetting.Off,
+        };
+        AddChild(mesh);
+        if (!solid) return;
+
+        var body = new StaticBody3D { Position = new Vector3(x, y, z) };
+        body.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(w, h, d) } });
+        AddChild(body);
+    }
+
+    private static StandardMaterial3D MakeMaterial(Color color, bool emissive = false)
+    {
+        var material = new StandardMaterial3D { AlbedoColor = color, Roughness = 0.9f };
+        if (emissive)
+        {
+            material.EmissionEnabled = true;
+            material.Emission = color;
+            material.EmissionEnergyMultiplier = 1.6f;
+        }
+        return material;
     }
 
     public RoomId RoomAt(float x, float z) => WorldData.RoomAt(x, z);

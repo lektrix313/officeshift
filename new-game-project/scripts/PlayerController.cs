@@ -22,6 +22,7 @@ public partial class PlayerController : CharacterBody3D
     public PropItem? HeldProp { get; set; }
     public HeldItem HeldItem { get; set; }
     private float _boostTimer;
+    private float _bobTime;
 
     /// <summary>Fired when a mop channel completes on a splat (GameMode handles evidence cleanup).</summary>
     public event Action<BloodSystem.Splat>? StainMopped;
@@ -146,11 +147,16 @@ public partial class PlayerController : CharacterBody3D
             Velocity = Vector3.Zero;
         }
 
-        // ---- carrying a bleeding body leaves a trail ----
-        if (Carrying != null && FeetPos.DistanceTo(_lastDripPos) > Bal.DripDistance)
+        // ---- carrying a bleeding body leaves a trail + Weekend at Bernie's bob ----
+        if (Carrying != null)
         {
-            _lastDripPos = FeetPos;
-            Mode.Blood!.Spawn(FeetPos, 1, 0.45f);
+            if (FeetPos.DistanceTo(_lastDripPos) > Bal.DripDistance)
+            {
+                _lastDripPos = FeetPos;
+                Mode.Blood!.Spawn(FeetPos, 1, 0.45f);
+            }
+            if (_carriedBundle != null)
+                _carriedBundle.Position = new Vector3(0.35f, -0.55f + System.MathF.Sin(_bobTime += (float)delta * 5f) * 0.05f, -1.0f);
         }
 
         // ---- interactions ----
@@ -241,6 +247,13 @@ public partial class PlayerController : CharacterBody3D
             MaterialOverride = new StandardMaterial3D { AlbedoColor = Color.FromHtml("e8b98a") },
         };
         _carriedBundle.AddChild(head);
+        var shades = new MeshInstance3D
+        {
+            Mesh = new BoxMesh { Size = new Vector3(0.3f, 0.05f, 0.06f) },
+            Position = new Vector3(0.72f, 0.09f, 0f),
+            MaterialOverride = new StandardMaterial3D { AlbedoColor = Color.FromHtml("111111") },
+        };
+        _carriedBundle.AddChild(shades);
         _camera.AddChild(_carriedBundle);
 
         SynthPickup();
@@ -309,6 +322,7 @@ public partial class PlayerController : CharacterBody3D
                     switch (ChannelMode)
                     {
                         case ChannelMode.Terminal:
+                            Mode.SetOfficeObjectState("serverterminal", OfficeObjectState.InUse, true);
                             HasBlueprint = true;
                             Mode.Synth?.Success();
                             Mode.Toast("BLUEPRINTS ACQUIRED. Now mail them out via the mail trolley.", ToastKind.Success);
@@ -323,9 +337,11 @@ public partial class PlayerController : CharacterBody3D
                             }
                             break;
                         case ChannelMode.Coffee:
+                            Mode.SetOfficeObjectState("coffeemaker", OfficeObjectState.Brewing, true);
                             Mode.BrewCoffee();
                             break;
                         case ChannelMode.Microwave:
+                            Mode.SetOfficeObjectState("microwave", OfficeObjectState.InUse, true);
                             Mode.HeatFish();
                             break;
                         case ChannelMode.Tape:
@@ -369,9 +385,24 @@ public partial class PlayerController : CharacterBody3D
             else if (_sprayUses <= 0) Mode.Toast("Empty. It's a decorative cylinder now.", ToastKind.Info);
             return;
         }
-        // 1. carrying a body near a hide spot -> hide it
+        // 1. carrying a body: disposal beats hiding
         if (Carrying != null)
         {
+            foreach (var def in WorldData.HideSpotDefs.Where(d => d.Disposal))
+            {
+                var dp = new Vector3(def.Pos.X, 0f, def.Pos.Z);
+                if (FeetPos.DistanceTo(dp) < 1.9f)
+                {
+                    var st = WorldRef.HideSpots.Find(h => h.Id == def.Id);
+                    if (st != null)
+                    {
+                        var v = Carrying;
+                        FreeBundle();
+                        Mode.DisposeBody(v, st);
+                    }
+                    return;
+                }
+            }
             var spot = WorldRef.NearestHideSpot(FeetPos, Bal.InteractRange + 0.4f);
             if (spot != null)
             {
@@ -442,6 +473,7 @@ public partial class PlayerController : CharacterBody3D
                     if (HeldItem == HeldItem.Laxative)
                     {
                         HeldItem = HeldItem.None;
+                        Mode.SetOfficeObjectState("coffeemaker", OfficeObjectState.Spilled, true);
                         Mode.SpikeCoffee();
                     }
                     else
@@ -457,6 +489,7 @@ public partial class PlayerController : CharacterBody3D
                     Mode.Toast("You found someone's fish in the fridge. Hold E. Commit the audacity.", ToastKind.Warn);
                     return;
                 case "firealarm":
+                    Mode.SetOfficeObjectState("firealarm", OfficeObjectState.Alarmed, true);
                     Mode.PullFireAlarm();
                     return;
                 case "phone":
@@ -497,6 +530,19 @@ public partial class PlayerController : CharacterBody3D
             }
         }
         // 4.8 pod-desk computer -> OmniPortal
+        // 4.8 pod-desk computer: hidden bodies make email fraud available
+        var absent = Mode.Npcs.Find(n => n.State == NpcState.Hidden && !n.Quit && !n.Disposed);
+        if (absent != null)
+        {
+            foreach (var m in WorldData.MonitorPositions())
+            {
+                if (FeetPos.DistanceTo(m) < 1.7f)
+                {
+                    Mode.OpenResignation(absent);
+                    return;
+                }
+            }
+        }
         foreach (var m in WorldData.MonitorPositions())
         {
             if (FeetPos.DistanceTo(m) < 1.7f)
@@ -688,6 +734,15 @@ public partial class PlayerController : CharacterBody3D
         var prop = NearestProp();
         if (prop != null)
             return $"E — Grab {prop.ItemType}";
+        var absentHack = Mode.Npcs.Find(n => n.State == NpcState.Hidden && !n.Quit && !n.Disposed);
+        if (absentHack != null)
+        {
+            foreach (var m in WorldData.MonitorPositions())
+            {
+                if (FeetPos.DistanceTo(m) < 1.7f)
+                    return $"E — Hack {absentHack.NpcName}'s email (write their resignation)";
+            }
+        }
         foreach (var m in WorldData.MonitorPositions())
         {
             if (FeetPos.DistanceTo(m) < 1.7f)

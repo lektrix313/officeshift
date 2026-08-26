@@ -1,4 +1,21 @@
-# React + TypeScript + Vite
+# Office Shift Workshop
+
+The root Vite app is now the early-access workshop for designing Office Shift
+infiltration levels. Open the grid-first level designer to place rooms, doors,
+cubicles, props, access-card gates, and multi-floor plans, then export both a
+portable workshop JSON and a Godot-oriented JSON payload. The existing playable
+prototype is available from the workshop's Play control.
+
+## Workshop loop
+
+- Place and drag elements on a 1-cell snap grid.
+- Tag each element with a designated room, department, gameplay footprint, and required keycard.
+- Define access cards and mark whether they can be obtained by Steal, Gaslight, Charm, Seduce, or Impersonate.
+- Use procedural dressing for non-gameplay lights, pictures, plants, and clutter.
+- Resolve validation warnings before exporting for Godot.
+
+Run with `npm run dev`.
+
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 

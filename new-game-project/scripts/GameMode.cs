@@ -19,6 +19,7 @@ public partial class GameMode : Node3D
     public Hud? Hud { get; private set; }
     public List<NpcBrain> Npcs { get; } = new();
     public List<PropItem> Items { get; } = new();
+    public List<OfficeObjectRuntime> OfficeObjects { get; } = new();
     public NpcBrain? Guard { get; private set; }
 
     public bool Started;
@@ -40,10 +41,20 @@ public partial class GameMode : Node3D
     public float EvacTimer;
     public float CaseEvidence;
     public bool CaseActive;
+    public string CaseSuspectName { get; private set; } = "";
+    public string CaseAllegation { get; private set; } = "";
     public bool TapeShredded;
+    public List<StaffMemory> OfficeFeed { get; } = new();
+    public List<CaseTestimony> CaseTestimonies { get; } = new();
+    public bool HearingOpen { get; private set; }
+    public bool HearingAvailable { get; private set; }
+    private bool _framedCaseResolved;
+    private float _hearingGraceTimer;
     private float _cameraCrimeUntil;
     private bool _onCameraToasted;
     private float _shiftElapsed;
+    /// <summary>Capture-only accelerator; normal play remains one realtime hour.</summary>
+    public float WorkdayTimeScale { get; set; } = 1f;
     public float MaxSusEver;
     private readonly List<string> _doneObjectives = new();
     private float _lureDwell;
@@ -55,6 +66,7 @@ public partial class GameMode : Node3D
     public TalkOverlay? Talk { get; private set; }
 
     private float _chatterTimer = 9f;
+    private float _gossipTimer = 7f;
     private float _hudTimer;
 
     /// <summary>Bodies awaiting their post-settle blood pool (port of poolSpawned logic).</summary>
@@ -62,8 +74,14 @@ public partial class GameMode : Node3D
 
     private readonly List<NoiseRef> _noises = new();
     private readonly List<float> _noiseBirth = new();
+    private readonly List<NpcStimulus> _stimuli = new();
     private Vector3 _lastNoisePos;
     private float _lastNoiseAt = -999f;
+    private readonly List<(HideSpotState Spot, NpcBrain Body, float Timer)> _smells = new();
+    private readonly List<(HideSpotState Spot, NpcBrain Discoverer)> _discoveries = new();
+    public bool PoliceIncoming;
+    private float _policeTimer;
+    public PoliceInterview? Interview { get; private set; }
 
     public sealed class StatsTracker
     {
@@ -126,13 +144,16 @@ public partial class GameMode : Node3D
         Player.Yaw = 0f; // facing -Z into the cubicle farm
 
         // ---- coworkers ----
+        int rosterIndex = 0;
         foreach (var def in Roster.Coworkers)
         {
             var body = new NpcBody();
             body.Init(def.Name, def.Arch);
             AddChild(body);
             body.Position = new Vector3(def.X, 0f, def.Z);
-            Npcs.Add(NpcBrain.Create(body, def.Zone));
+            var brain = NpcBrain.Create(body, def.Zone);
+            brain.InitializeWorkday(rosterIndex++);
+            Npcs.Add(brain);
         }
 
         // the slob slumps at his desk
@@ -141,8 +162,10 @@ public partial class GameMode : Node3D
             if (n.Arch == Archetype.Slob)
             {
                 n.Body.Position = WorldData.SlobDeskPos;
-                n.State = NpcState.Seated;
-                n.Body.ShowSleeping(true);
+            n.State = NpcState.Seated;
+            n.WorkState = WorkdayState.FeelingSleepy;
+            n.Body.SetWorkdayState(WorkdayState.FeelingSleepy);
+            n.Body.ShowSleeping(true);
             }
         }
 
@@ -158,7 +181,13 @@ public partial class GameMode : Node3D
         // wire player FX events
         Player.StainMopped += OnStainMopped;
 
+        Interview = new PoliceInterview { Name = "Interview" };
+        AddChild(Interview);
+
         CameraSystem.CreateNodes(this);
+
+        // State-bearing object registry. Meshes remain replaceable placeholders.
+        OfficeObjects.AddRange(OfficeObjectLibrary.CreateStarterObjects());
 
         // desk props
         foreach (var def in WorldData.PropItems)
@@ -174,9 +203,15 @@ public partial class GameMode : Node3D
         AddChild(Talk);
     }
 
-    public override void _UnhandledInput(InputEvent e)
+    public override void _Input(InputEvent e)
     {
-        if (!Started && e is InputEventMouseButton mb && mb.Pressed && mb.ButtonIndex == MouseButton.Left && !Over)
+        // _Input runs before Control nodes, so the full-screen start overlay cannot swallow clock-in.
+        bool clickedToStart = e is InputEventMouseButton mb
+            && mb.Pressed
+            && mb.ButtonIndex == MouseButton.Left;
+        bool acceptedToStart = e.IsActionPressed("ui_accept");
+
+        if (!Started && !Over && (clickedToStart || acceptedToStart))
         {
             Started = true;
             Input.MouseMode = Input.MouseModeEnum.Captured;
@@ -223,7 +258,8 @@ public partial class GameMode : Node3D
         if (AlertTimer > 0) AlertTimer -= dt;
         MaxSusEver = System.MathF.Max(MaxSusEver, MaxSuspicionValue);
 
-        _shiftElapsed += dt;
+        _shiftElapsed += dt * WorkdayTimeScale;
+        TickOfficeObjects(dt);
         VendingCooldown = System.MathF.Max(0f, VendingCooldown - dt);
         PhoneCooldown = System.MathF.Max(0f, PhoneCooldown - dt);
         AlarmCooldown = System.MathF.Max(0f, AlarmCooldown - dt);
@@ -246,7 +282,8 @@ public partial class GameMode : Node3D
                 Toast("All clear. Everyone shuffles back to their desks, betrayed.", ToastKind.Info);
             }
         }
-        UIOpen = (Portal != null && Portal.IsOpen) || (Talk != null && Talk.IsOpen);
+        UIOpen = (Portal != null && Portal.IsOpen) || (Talk != null && Talk.IsOpen)
+            || (Interview != null && Interview.IsOpen);
 
         // ---- surveillance + HR case ----
         if (_shiftElapsed < _cameraCrimeUntil && Player != null &&
@@ -276,6 +313,14 @@ public partial class GameMode : Node3D
                 Toast("HR CASE CLOSED. The truth died in the shredder. Somehow.", ToastKind.Success);
             }
         }
+        if (HearingAvailable && !HearingOpen)
+            _hearingGraceTimer = System.MathF.Max(0f, _hearingGraceTimer - dt);
+        if (CaseActive && !string.IsNullOrEmpty(CaseSuspectName) &&
+            !_framedCaseResolved && !HearingOpen && CaseEvidence >= 70f &&
+            _hearingGraceTimer <= 0f)
+        {
+            ResolveFramedCase();
+        }
         if (CaseEvidence >= 100f)
         {
             EndGame(false, "The HR hearing lasts four minutes. The spreadsheet is entered into evidence. You are escorted out with a box of desk plants.");
@@ -285,7 +330,7 @@ public partial class GameMode : Node3D
         // ---- AI tick ----
         var ctx = new AiContext
         {
-            PlayerPos = Player.FeetPos,
+            PlayerPos = Player!.FeetPos,
             PlayerVisibleToAi = true,
             PlayerCrouching = Player.Crouching,
             PlayerCarrying = Player.Carrying != null,
@@ -306,9 +351,12 @@ public partial class GameMode : Node3D
             StinkPos = WorldEvents.StinkPos,
             NoiseFresh = _shiftElapsed - _lastNoiseAt < 8f,
             NoisePos = _lastNoisePos,
+            Stimuli = _stimuli,
+            WorkdayElapsed = _shiftElapsed,
             Toast = Toast,
             AlarmSfx = () => Synth?.Alarm(),
             CanSee = CanSee,
+            SetObjectState = (id, state, actor) => SetOfficeObjectState(id, state, false, actor),
             OnReportReachedGuard = OnReportReachedGuard,
             OnPlayerCaught = () => EndGame(false, "Officer Briggs caught you red-handed. HR would like a word. Several words. In a basement."),
         };
@@ -336,6 +384,14 @@ public partial class GameMode : Node3D
             else _lureDwell = 0f;
         }
 
+        // ---- office memory / gossip loop ----
+        _gossipTimer -= dt;
+        if (_gossipTimer <= 0f)
+        {
+            _gossipTimer = 12f;
+            SpreadOneRumor();
+        }
+
         // ---- ambient chatter ----
         _chatterTimer -= dt;
         if (_chatterTimer <= 0)
@@ -359,6 +415,56 @@ public partial class GameMode : Node3D
                 _noises[i].Expired = true;
                 _noises.RemoveAt(i);
                 _noiseBirth.RemoveAt(i);
+            }
+        }
+
+        // ---- smell clock: hidden bodies ripen, get discovered, police get called ----
+        for (int i = _smells.Count - 1; i >= 0; i--)
+        {
+            var (spot, body, timer) = _smells[i];
+            float t = timer - dt;
+            if (t <= 0)
+            {
+                _smells.RemoveAt(i);
+                PublishStimulus(NpcStimulusKind.Stink, spot.Pos, 1.15f, false,
+                    $"A hidden body has started to smell near the {spot.Name}.", radius: 16f);
+                Toast($"Something smells... ripe. Near the {spot.Name}.", ToastKind.Warn);
+                NpcBrain? sniffer = null;
+                float d1 = float.MaxValue;
+                foreach (var n in Npcs)
+                {
+                    if (!n.Awake || n.Talking || n == Guard) continue;
+                    float d = n.Pos.DistanceTo(spot.Pos);
+                    if (d < d1) { d1 = d; sniffer = n; }
+                }
+                if (sniffer != null)
+                {
+                    ApplyDirective(sniffer, "coffeepoint", 0f);
+                    sniffer.DirectiveZone = null;
+                    sniffer.DirectiveTarget = spot.Pos;
+                    sniffer.DirectiveTimer = 60f;
+                    _discoveries.Add((spot, sniffer));
+                }
+            }
+            else _smells[i] = (spot, body, t);
+        }
+        for (int i = _discoveries.Count - 1; i >= 0; i--)
+        {
+            var (spot, disc) = _discoveries[i];
+            if (!disc.Awake || disc.Disposed) { _discoveries.RemoveAt(i); continue; }
+            if (disc.Pos.DistanceTo(spot.Pos) < 1.4f)
+            {
+                _discoveries.RemoveAt(i);
+                DiscoverBody(spot, disc);
+            }
+        }
+        if (PoliceIncoming)
+        {
+            _policeTimer -= dt;
+            if (_policeTimer <= 0 && !UIOpen && Interview != null && !Interview.IsOpen)
+            {
+                Interview.Open();
+                UIOpen = true;
             }
         }
 
@@ -424,6 +530,86 @@ public partial class GameMode : Node3D
 
     public void Toast(string msg, ToastKind kind = ToastKind.Info) => Hud?.Toast(msg, kind);
 
+    private void TickOfficeObjects(float dt)
+    {
+        foreach (var officeObject in OfficeObjects)
+            officeObject.Tick(dt);
+    }
+
+    public OfficeObjectRuntime? OfficeObject(string id) =>
+        OfficeObjects.FirstOrDefault(officeObject => officeObject.Id == id);
+
+    /// <summary>Changes an object state and feeds its configured effect to the consequence engine.</summary>
+    public bool SetOfficeObjectState(string id, OfficeObjectState next, bool playerLed = false,
+        NpcBrain? actor = null, string? keycardId = null)
+    {
+        var officeObject = OfficeObject(id);
+        if (officeObject == null || !officeObject.Definition.Allows(next)) return false;
+        if (next == OfficeObjectState.Unlocked &&
+            (officeObject.State is OfficeObjectState.Locked or OfficeObjectState.KeycardRequired) &&
+            !officeObject.TryUse(keycardId))
+            return false;
+        if (!officeObject.SetState(next)) return false;
+        officeObject.LastActor = actor;
+        var profile = officeObject.Definition.ProfileFor(next);
+        if (!profile.StimulusKind.HasValue) return true;
+        PublishStimulus(profile.StimulusKind.Value, officeObject.Position, profile.Activation,
+            playerLed, $"{officeObject.Definition.DisplayName} is {next}.",
+            objectId: officeObject.Id, objectType: officeObject.Definition.Type,
+            objectState: next, objectDepartment: officeObject.Definition.Department,
+            stressDelta: profile.StressDelta, comfortDelta: profile.ComfortDelta,
+            radius: profile.Radius, source: actor, activeUser: actor,
+            preferredAction: profile.PreferredAction);
+        return true;
+    }
+
+    /// <summary>Feeds player-led and ambient events into the same NPC consequence queue.</summary>
+    public void PublishStimulus(NpcStimulusKind kind, Vector3 position, float intensity,
+        bool playerLed, string description, object? evidenceRef = null,
+        EvidenceKind? evidenceKind = null, float radius = 18f, NpcBrain? source = null,
+        string objectId = "", OfficeObjectType? objectType = null,
+        OfficeObjectState? objectState = null, string objectDepartment = "",
+        float stressDelta = 0f, float comfortDelta = 0f,
+        NpcReactionAction preferredAction = NpcReactionAction.Observe,
+        NpcBrain? activeUser = null)
+    {
+        _stimuli.Add(new NpcStimulus
+        {
+            Id = $"{kind}:{_shiftElapsed:F2}:{_stimuli.Count}",
+            Kind = kind,
+            Position = position,
+            Intensity = intensity,
+            PlayerLed = playerLed,
+            Description = description,
+            ObjectId = objectId,
+            ObjectType = objectType,
+            ObjectState = objectState,
+            ObjectDepartment = objectDepartment,
+            StressDelta = stressDelta,
+            ComfortDelta = comfortDelta,
+            PreferredAction = preferredAction,
+            EvidenceRef = evidenceRef,
+            EvidenceKind = evidenceKind,
+            Radius = radius,
+            ActiveUser = activeUser,
+            Source = source,
+        });
+    }
+
+    public bool TryAccessOfficeObject(string id, string? keycardId, NpcBrain? actor = null)
+    {
+        var officeObject = OfficeObject(id);
+        if (officeObject == null) return false;
+        if (officeObject.TryUse(keycardId)) return true;
+        PublishStimulus(NpcStimulusKind.AccessDenied, officeObject.Position, ObjectBalance.AccessDeniedActivation,
+            actor == null, $"Access denied at {officeObject.Definition.DisplayName}.",
+            objectId: officeObject.Id, objectType: officeObject.Definition.Type,
+            objectState: officeObject.State, objectDepartment: officeObject.Definition.Department,
+            stressDelta: ObjectBalance.AccessDeniedStress, radius: ObjectBalance.AccessDeniedRadius, source: actor,
+            preferredAction: NpcReactionAction.SeekHelp);
+        return false;
+    }
+
     public void EndGame(bool won, string reason)
     {
         if (Over) return;
@@ -434,6 +620,258 @@ public partial class GameMode : Node3D
         if (won) Synth?.Success();
         else Synth?.Alarm();
         PushHud();
+    }
+
+    /// <summary>Record a remembered incident for nearby witnesses and the office feed.</summary>
+    public void RecordIncident(string subject, string incident, Vector3 pos, string narrative,
+        MemoryKind kind = MemoryKind.Witness)
+    {
+        var feedMemory = new StaffMemory
+        {
+            Subject = subject,
+            Incident = incident,
+            Narrative = narrative,
+            Location = pos,
+            Confidence = kind == MemoryKind.Forged ? 58f : 82f,
+            Kind = kind,
+            Shared = false,
+            Age = 0f,
+        };
+        OfficeFeed.Insert(0, feedMemory);
+        while (OfficeFeed.Count > 24) OfficeFeed.RemoveAt(OfficeFeed.Count - 1);
+
+        foreach (var witness in Npcs)
+        {
+            if (!witness.Awake || witness == Guard) continue;
+            float distance = witness.Pos.DistanceTo(pos);
+            if (distance > 12f) continue;
+            bool sawIt = distance < Bal.WitnessAutoSeeDist || CanSee(witness, pos);
+            if (!sawIt && kind != MemoryKind.Forged) continue;
+            witness.Remember(new StaffMemory
+            {
+                Subject = subject,
+                Incident = incident,
+                Narrative = narrative,
+                Location = pos,
+                Confidence = kind == MemoryKind.Forged
+                    ? 48f + witness.Personality.Agreeableness * 35f
+                    : 55f + witness.Personality.Conscientiousness * 40f,
+                Kind = kind,
+                Shared = false,
+                Age = 0f,
+            });
+        }
+    }
+
+    private void SpreadOneRumor()
+    {
+        var source = Npcs.FirstOrDefault(n => n.Arch == Archetype.Gossip && n.Awake &&
+            n.Memories.Any(m => !m.Shared && m.Confidence > 20f));
+        if (source == null) return;
+        var original = source.Memories.Last(m => !m.Shared && m.Confidence > 20f);
+        original.Shared = true;
+        string hedge = original.Confidence > 70f ? "Susan says" : "Susan vaguely remembers";
+        string narrative = $"{hedge} {original.Subject} was involved in {original.Incident.ToLowerInvariant()} near {WorldData.RoomAt(original.Location.X, original.Location.Z)}.";
+        foreach (var listener in Npcs)
+        {
+            if (!listener.Awake || listener == source || listener == Guard) continue;
+            float range = Bal.GossipRadius * source.Personality.GossipRadiusMultiplier;
+            if (listener.Pos.DistanceTo(source.Pos) > range) continue;
+            listener.Remember(new StaffMemory
+            {
+                Subject = original.Subject,
+                Incident = original.Incident,
+                Narrative = narrative,
+                Location = original.Location,
+                Confidence = original.Confidence * (0.48f + listener.Personality.Openness * 0.22f),
+                Kind = MemoryKind.Rumor,
+                Shared = false,
+                Age = 0f,
+            });
+        }
+        OfficeFeed.Insert(0, new StaffMemory
+        {
+            Subject = original.Subject,
+            Incident = original.Incident,
+            Narrative = narrative,
+            Location = original.Location,
+            Confidence = original.Confidence * 0.65f,
+            Kind = MemoryKind.Rumor,
+            Shared = false,
+            Age = 0f,
+        });
+        while (OfficeFeed.Count > 24) OfficeFeed.RemoveAt(OfficeFeed.Count - 1);
+        if (original.Kind == MemoryKind.Forged && original.Subject == CaseSuspectName)
+        {
+            CaseEvidence = System.MathF.Min(100f, CaseEvidence + 14f);
+            Toast($"The rumor sticks. HR logs another corroborating account about {CaseSuspectName}.", ToastKind.Warn);
+        }
+        Toast($"OFFICE FEED: {narrative}", ToastKind.Warn);
+    }
+
+    /// <summary>Files a target-specific anonymous HR allegation and seeds staff memories.</summary>
+    public void FileAnonymousReport(string suspect, string allegation, string details)
+    {
+        var target = Npcs.FirstOrDefault(n => n.NpcName == suspect && n != Guard);
+        if (target == null) return;
+        CaseSuspectName = suspect;
+        CaseAllegation = allegation;
+        CaseEvidence = System.MathF.Min(100f, CaseEvidence + (allegation == "A MURDER" ? 56f : 22f));
+        CaseActive = true;
+        _framedCaseResolved = false;
+        HearingAvailable = true;
+        HearingOpen = false;
+        _hearingGraceTimer = 20f;
+        BuildCaseTestimonies(suspect, allegation, target.Pos);
+        string narrative = string.IsNullOrWhiteSpace(details)
+            ? $"Anonymous report: {suspect} is implicated in {allegation.ToLowerInvariant()}."
+            : $"Anonymous report: {suspect} — {details.Trim()}";
+        RecordIncident(suspect, allegation, target.Pos, narrative, MemoryKind.Forged);
+        PublishStimulus(NpcStimulusKind.PlayerCrime, target.Pos, 1.1f, true,
+            $"The player filed a forged {allegation} allegation against {suspect}.", radius: 18f);
+        foreach (var witness in Npcs)
+        {
+            if (!witness.Awake || witness == target || witness == Guard) continue;
+            if (witness.Arch == Archetype.Gossip)
+            {
+                witness.Remember(new StaffMemory
+                {
+                    Subject = suspect,
+                    Incident = allegation,
+                    Narrative = narrative,
+                    Location = target.Pos,
+                    Confidence = 56f + witness.Personality.Extraversion * 20f,
+                    Kind = MemoryKind.Forged,
+                    Shared = false,
+                    Age = 0f,
+                });
+            }
+        }
+        Toast($"ANONYMOUS REPORT FILED. {suspect} is now the subject of an HR case: {allegation}.", ToastKind.Chaos);
+        Toast("The office has received a version of events. Versions are powerful.", ToastKind.Warn);
+    }
+
+    private void BuildCaseTestimonies(string suspect, string allegation, Vector3 location)
+    {
+        CaseTestimonies.Clear();
+        var witnesses = Npcs
+            .Where(n => n != Guard && n.NpcName != suspect && n.Awake)
+            .OrderByDescending(n => n.Personality.Conscientiousness)
+            .Take(3)
+            .ToList();
+        for (int i = 0; i < witnesses.Count; i++)
+        {
+            var witness = witnesses[i];
+            bool contradiction = i == 1 || witness.Personality.Openness < 0.4f;
+            string claimedRoom = contradiction
+                ? "the printer room"
+                : WorldData.RoomAt(location.X, location.Z).ToString().ToLowerInvariant();
+            string statement = contradiction
+                ? $"{witness.NpcName}: I heard {suspect} was involved, but I remember the incident being near the printer room."
+                : $"{witness.NpcName}: I saw enough to believe {suspect} was involved in {allegation.ToLowerInvariant()} near the {claimedRoom}.";
+            CaseTestimonies.Add(new CaseTestimony
+            {
+                Witness = witness.NpcName,
+                Suspect = suspect,
+                Statement = statement,
+                LocationClaim = claimedRoom,
+                Confidence = 46f + witness.Personality.Conscientiousness * 42f,
+                Contradictory = contradiction,
+                Challenged = false,
+                Coached = false,
+            });
+        }
+    }
+
+    public void OpenHearing()
+    {
+        if (!CaseActive || string.IsNullOrEmpty(CaseSuspectName) || Portal == null) return;
+        HearingOpen = true;
+        _hearingGraceTimer = 999f;
+        Portal.OpenHearing();
+        UIOpen = true;
+    }
+
+    public void ChallengeTestimony(int index)
+    {
+        if (!HearingOpen || index < 0 || index >= CaseTestimonies.Count) return;
+        var testimony = CaseTestimonies[index];
+        if (testimony.Challenged) return;
+        testimony.Challenged = true;
+        if (testimony.Contradictory)
+        {
+            testimony.Confidence = System.MathF.Max(0f, testimony.Confidence - 28f);
+            CaseEvidence = System.MathF.Max(0f, CaseEvidence - 18f);
+            Toast($"CHALLENGE: {testimony.Witness}'s story contradicts the location record. HR removes a confidence point.", ToastKind.Success);
+        }
+        else
+        {
+            CaseEvidence = System.MathF.Min(100f, CaseEvidence + 8f);
+            Toast($"CHALLENGE FAILED: {testimony.Witness} is annoyingly consistent.", ToastKind.Warn);
+        }
+    }
+
+    public void CoachTestimony(int index)
+    {
+        if (!HearingOpen || index < 0 || index >= CaseTestimonies.Count) return;
+        var testimony = CaseTestimonies[index];
+        if (testimony.Coached) return;
+        testimony.Coached = true;
+        testimony.Confidence = System.MathF.Max(20f, testimony.Confidence - 10f);
+        CaseEvidence = System.MathF.Min(100f, CaseEvidence + 6f);
+        Toast($"COACHING: {testimony.Witness} repeats your version with suspiciously perfect wording.", ToastKind.Info);
+    }
+
+    public void AppealCase()
+    {
+        if (!HearingOpen) return;
+        int contradictions = CaseTestimonies.Count(t => t.Contradictory && t.Challenged);
+        int coached = CaseTestimonies.Count(t => t.Coached);
+        HearingOpen = false;
+        HearingAvailable = false;
+        UIOpen = false;
+        Portal?.Close();
+        Input.MouseMode = Input.MouseModeEnum.Captured;
+        if (contradictions >= 1 && CaseEvidence < 70f)
+        {
+            CaseEvidence = 0f;
+            CaseActive = false;
+            CaseSuspectName = "";
+            CaseAllegation = "";
+            _framedCaseResolved = false;
+            Toast("APPEAL UPHELD. The stories do not agree. HR files the case under 'probably not'.", ToastKind.Success);
+        }
+        else
+        {
+            CaseEvidence = System.MathF.Min(100f, CaseEvidence + (coached > 0 ? 12f : 22f));
+            Toast("APPEAL DENIED. The paperwork has paperwork. The case proceeds.", ToastKind.Chaos);
+        }
+    }
+
+    private void ResolveFramedCase()
+    {
+        var target = Npcs.FirstOrDefault(n => n.NpcName == CaseSuspectName && n != Guard);
+        if (target == null) return;
+        _framedCaseResolved = true;
+        HearingAvailable = false;
+        HearingOpen = false;
+        target.Quit = true;
+        target.State = NpcState.Hidden;
+        target.Body.SetVisibleRec(false);
+        Toast($"HR DECISION: {target.NpcName} is responsible for {CaseAllegation.ToLowerInvariant()}. Badge revoked. Desk plants boxed.", ToastKind.Chaos);
+        RecordIncident(target.NpcName, "a confirmed HR case", target.HomePos,
+            $"HR confirmed {target.NpcName} for {CaseAllegation.ToLowerInvariant()}. The office remembers the verdict, not the truth.",
+            MemoryKind.Forged);
+        var sheet = Personas.RandomSheet();
+        Personas.ByName[sheet.Name] = sheet;
+        var body = new NpcBody();
+        body.Init(sheet.Name, Archetype.Drone);
+        AddChild(body);
+        body.Position = target.HomePos;
+        var replacement = NpcBrain.Create(body, "drone");
+        replacement.InitializeWorkday(Npcs.Count);
+        Npcs.Add(replacement);
+        Toast($"Replacement hire: {sheet.Name}. {sheet.Traits}. Nobody asked for a reference.", ToastKind.Success);
     }
 
     /// <summary>Port of tryBonk() aftermath. Called by PlayerController on a landed swing.</summary>
@@ -451,25 +889,19 @@ public partial class GameMode : Node3D
             ? $"{victim.NpcName} was already asleep. You just made it official. And messy."
             : $"You bonked {victim.NpcName} with a keyboard. There is… some blood. Mop's in the supply closet.",
             ToastKind.Chaos);
+        RecordIncident("You", "a knockout", victim.Pos,
+            $"Someone saw you put {victim.NpcName} down near the {WorldData.RoomAt(victim.Pos.X, victim.Pos.Z)}.");
+        PublishStimulus(NpcStimulusKind.PlayerCrime, victim.Pos, 1.6f, true,
+            $"The player knocked out {victim.NpcName}.", victim, EvidenceKind.Body, 15f);
 
+        /* Witness activation, suspicion, and waking now come from PlayerCrime stimulus processing. */
+        /* The loop is retained only for disguise breakage on direct witnesses below. */
         foreach (var w in Npcs)
         {
             if (w == victim || !w.Awake) continue;
             float dist = w.Pos.DistanceTo(Player.FeetPos);
             bool seen = CanSee(w, Player.FeetPos) || dist < Bal.WitnessAutoSeeDist;
             if (!seen) continue;
-            if (w.State == NpcState.Seated && dist < 5f)
-            {
-                w.State = NpcState.Routine; // the noise wakes the slob
-                w.Body.ShowSleeping(false);
-                w.AddSuspicion(Bal.WitnessWakeSus);
-                Toast($"The commotion woke {w.NpcName} up — and they saw EVERYTHING.", ToastKind.Warn);
-            }
-            else
-            {
-                w.AddSuspicion(Bal.WitnessSus);
-                Toast($"{w.NpcName} saw that. {w.NpcName} is reconsidering your friendship.", ToastKind.Warn);
-            }
             if (Player.DisguiseOf != null) Player.BlowDisguise();
         }
     }
@@ -483,6 +915,8 @@ public partial class GameMode : Node3D
         victim.Body.ShowSleeping(false);
         Stats.Hides++;
         Synth?.Pickup();
+        if (spot.SmellDelay > 0)
+            _smells.Add((spot, victim, spot.SmellDelay));
 
         // investigators of this body lose the plot
         foreach (var n in Npcs)
@@ -574,6 +1008,8 @@ public partial class GameMode : Node3D
             Guard.LostSightTimer = 0f;
         }
         Toast("Officer Briggs has been informed. He is walking over with intent.", ToastKind.Warn);
+        RecordIncident("You", "a witness report", reporter.Pos,
+            $"{reporter.NpcName} reported suspicious activity to Briggs.");
         Synth?.Alarm();
     }
 
@@ -590,6 +1026,10 @@ public partial class GameMode : Node3D
         Toast(wasAsleep
             ? $"{victim.NpcName} was already asleep. The {itemType} made it official."
             : $"{victim.NpcName} eats a {itemType} to the back. Down. Very down.", ToastKind.Chaos);
+        RecordIncident("You", $"a {itemType} assault", victim.Pos,
+            $"A {itemType} knocked {victim.NpcName} out near the {WorldData.RoomAt(victim.Pos.X, victim.Pos.Z)}.");
+        PublishStimulus(NpcStimulusKind.PlayerCrime, victim.Pos, 1.35f, true,
+            $"The player hit {victim.NpcName} with a {itemType}.", victim, EvidenceKind.Body, 15f);
 
         foreach (var w in Npcs)
         {
@@ -597,9 +1037,20 @@ public partial class GameMode : Node3D
             float dist = w.Pos.DistanceTo(victim.Pos);
             bool seen = CanSee(w, victim.Pos) || dist < Bal.WitnessAutoSeeDist;
             if (!seen) continue;
-            w.AddSuspicion(Bal.WitnessSus);
-            Toast($"{w.NpcName} saw you {itemType}-tackle {victim.NpcName}. HR-adjacent behavior.", ToastKind.Warn);
             if (Player.DisguiseOf != null) Player.BlowDisguise();
+        }
+    }
+
+    private void ClearInvestigationsOf(NpcBrain target, string spotName, float minSus)
+    {
+        foreach (var n in Npcs)
+        {
+            if ((n.State == NpcState.Curious || n.State == NpcState.Panic) &&
+                (ReferenceEquals(n.InvestigateRef, target) || ReferenceEquals(n.PanicRef, target)))
+            {
+                n.ShrugItOff(minSus);
+                Toast($"{n.NpcName} saw {target.NpcName} vanish into the {spotName}. \"…Nope. Not paid enough.\"", ToastKind.Warn);
+            }
         }
     }
 
@@ -616,12 +1067,9 @@ public partial class GameMode : Node3D
             ? $"The {itemType} SHATTERS across the floor. Everyone heard that."
             : $"The {itemType} {PropItem.NoiseVerb(itemType)}. Everyone within earshot heard that.", ToastKind.Warn);
 
-        foreach (var n in Npcs)
-        {
-            if (!n.Awake || n.Talking) continue;
-            if (n.Pos.DistanceTo(pos) > radius) continue;
-            n.StartCurious(pos, noiseRef, EvidenceKind.Noise);
-        }
+        PublishStimulus(NpcStimulusKind.PlayerNoise, pos, shattered ? 1.35f : 0.9f, true,
+            $"A {itemType} made a noise.", noiseRef, EvidenceKind.Noise, radius);
+
     }
 
     private void CompleteKnockout(NpcBrain victim)
@@ -677,6 +1125,116 @@ public partial class GameMode : Node3D
         "KNOCKOUT_NPC" => $"Bonk {o.Npc}. For the mission.",
         _ => o.Type,
     };
+
+    // ================= body economy =================
+
+    public void DisposeBody(NpcBrain victim, HideSpotState spot)
+    {
+        if (Player?.Carrying != victim) return;
+        Player.Carrying = null;
+        victim.Disposed = true;
+        victim.State = NpcState.Hidden;
+        victim.Body.SetVisibleRec(false);
+        Stats.Hides++;
+        Synth?.Pickup();
+        ClearInvestigationsOf(victim, spot.Name, Bal.VanishPanicSus);
+        Toast($"{victim.NpcName} was {spot.Action}. No body, no crime. Legally.", ToastKind.Success);
+    }
+
+    private void DiscoverBody(HideSpotState spot, NpcBrain discoverer)
+    {
+        var victim = spot.Occupants.Count > 0
+            ? Npcs.Find(n => n.NpcName == spot.Occupants[0])
+            : null;
+        if (victim == null || victim.Disposed || victim.Quit) return;
+
+        victim.Body.Position = new Vector3(spot.Pos.X + 0.6f, 0f, spot.Pos.Z);
+        victim.Body.SetVisibleRec(true);
+        victim.Body.PlayKnockoutPose();
+        victim.Body.ShowSleeping(true);
+        victim.State = NpcState.Out;
+        spot.Occupants.Clear();
+        spot.SmellDelay = 0f;
+
+        Toast($"THE BODY. {discoverer.NpcName} found {victim.NpcName} in the {spot.Name}. THE POLICE HAVE BEEN CALLED.", ToastKind.Chaos);
+        PublishStimulus(NpcStimulusKind.BodyFound, spot.Pos, 1.45f, false,
+            $"{discoverer.NpcName} found {victim.NpcName}.", victim, EvidenceKind.Body, 20f, discoverer);
+        RecordIncident("Unknown", "a body discovery", spot.Pos,
+            $"{discoverer.NpcName} found {victim.NpcName} in the {spot.Name}. Nobody agrees who put them there.");
+        Synth?.Alarm();
+        CaseEvidence = System.MathF.Min(100f, CaseEvidence + 45f);
+        if (!CaseActive) { CaseActive = true; Toast("HR CASE OPENED — a body is HR's whole personality.", ToastKind.Chaos); }
+
+        PoliceIncoming = true;
+        _policeTimer = 8f;
+        Interview?.Prepare(victim.NpcName, spot.Name);
+    }
+
+    public void OnInterviewResolved(int passes, int total)
+    {
+        PoliceIncoming = false;
+        UIOpen = false;
+        Input.MouseMode = Input.MouseModeEnum.Captured;
+        if (passes >= 2)
+        {
+            CaseEvidence = System.MathF.Min(100f, CaseEvidence + (passes == total ? 30f : 55f));
+            Toast($"Interview over. {passes}/{total} answers held up. The detective squints at you forever now.", passes == total ? ToastKind.Success : ToastKind.Warn);
+        }
+        else
+        {
+            EndGame(false, "The detective stops writing. 'That's the one, officer.' Handcuffs. Camera. Box of desk plants. FIN.");
+        }
+    }
+
+    public void OpenResignation(NpcBrain npc)
+    {
+        if (UIOpen || Portal == null) return;
+        Portal.OpenForge(npc);
+        UIOpen = true;
+    }
+
+    public void OnResignationSent(NpcBrain npc, string letter)
+    {
+        string low = letter.ToLowerInvariant();
+        bool hasReason = new[] { "family", "relocate", "opportunity", "startup", "health", "travel", "find myself", "soul", "abroad", "grief" }
+            .Any(low.Contains);
+        bool suspicious = new[] { "kill", "murder", "dead", "body", "i did it", "buried", "sorry about" }.Any(low.Contains);
+        bool accepted = letter.Length > 60 && hasReason && !suspicious;
+        string verdict = accepted
+            ? "Letter reads exactly like them. Eerie."
+            : suspicious
+                ? "HR forwarded this to the police. Why would you write that."
+                : "HR bounced it: 'Doesn't read like them.'";
+        ResolveResignation(npc, accepted, verdict);
+    }
+
+    public void ResolveResignation(NpcBrain npc, bool accepted, string verdict)
+    {
+        Toast($"[RESIGNATION] {verdict}", accepted ? ToastKind.Success : ToastKind.Warn);
+        if (!accepted)
+        {
+            CaseEvidence = System.MathF.Min(100f, CaseEvidence + 10f);
+            return;
+        }
+
+        npc.Quit = true;
+        npc.State = NpcState.Hidden;
+        npc.Body.SetVisibleRec(false);
+        Toast($"{npc.NpcName} has resigned, effective immediately. Their desk is already being auctioned.", ToastKind.Success);
+
+        var sheet = Personas.RandomSheet();
+        Personas.ByName[sheet.Name] = sheet;
+        var body = new NpcBody();
+        body.Init(sheet.Name, Archetype.Drone);
+        AddChild(body);
+        body.Position = npc.HomePos;
+        var brain = NpcBrain.Create(body, "drone");
+        brain.InitializeWorkday(Npcs.Count);
+        Npcs.Add(brain);
+        Toast($"New hire: {sheet.Name}. {sheet.Traits}. {sheet.Greeting}", ToastKind.Info);
+        UIOpen = false;
+        Input.MouseMode = Input.MouseModeEnum.Captured;
+    }
 
     // ================= scenario events =================
 
@@ -737,6 +1295,8 @@ public partial class GameMode : Node3D
         best.DirectiveZone = null;
         best.DirectiveTarget = phonePos;
         best.DirectiveTimer = 25f;
+        PublishStimulus(NpcStimulusKind.PhoneCall, phonePos, 0.9f, true,
+            $"A desk phone is ringing for {best.NpcName}.", radius: 18f, source: best);
         Toast($"{best.NpcName} answers the desk phone: \"Yes, this is {best.NpcName}.\" They're heading over.", ToastKind.Info);
     }
 
@@ -746,6 +1306,8 @@ public partial class GameMode : Node3D
         WorldEvents.CoffeeSpiked = true;
         WorldEvents.SpikeUsesLeft = 3;
         Synth?.Pickup();
+        PublishStimulus(NpcStimulusKind.CoffeeBreak, Player?.FeetPos ?? Vector3.Zero, 1.1f, true,
+            "The player spiked the office coffee.", radius: 24f);
         Toast("Coffee spiked. Three cups until the office learns regret.", ToastKind.Chaos);
     }
 
@@ -764,6 +1326,8 @@ public partial class GameMode : Node3D
         int pulled = 0;
         if (first != null) { ApplyDirective(first, "coffeepoint", 12f); pulled++; }
         if (second != null) { ApplyDirective(second, "coffeepoint", 12f); pulled++; }
+        PublishStimulus(NpcStimulusKind.CoffeeBreak, Player?.FeetPos ?? Vector3.Zero, 0.75f, true,
+            "Fresh coffee is available at the break station.", radius: 24f);
         Toast(pulled > 0
             ? $"Fresh coffee. The scent drags {first?.NpcName} and {second?.NpcName} away from their desks."
             : "Fresh coffee. Nobody noticed. Tragic.", ToastKind.Info);
@@ -775,6 +1339,8 @@ public partial class GameMode : Node3D
         WorldEvents.StinkActive = true;
         WorldEvents.StinkPos = new Vector3(22f, 0f, -15f);
         StinkTimer = 20f;
+        PublishStimulus(NpcStimulusKind.Stink, WorldEvents.StinkPos, 1.2f, true,
+            "Microwaved fish has filled the break room.", radius: 16f);
         Synth?.Alarm();
         Toast("FISH. MICROWAVED. The break room evacuates itself.", ToastKind.Chaos);
     }
@@ -786,6 +1352,8 @@ public partial class GameMode : Node3D
         WorldEvents.EvacPoint = new Vector3(0f, 0f, 17f);
         EvacTimer = 12f;
         AlarmCooldown = 90f;
+        PublishStimulus(NpcStimulusKind.FireAlarm, WorldEvents.EvacPoint, 1.25f, true,
+            "The fire alarm is ringing.", radius: 100f);
         Synth?.Alarm();
         Toast("FIRE ALARM. Everyone files to reception. You did this.", ToastKind.Chaos);
     }
@@ -839,6 +1407,8 @@ public partial class GameMode : Node3D
         if (result.DirectiveZone != null && DirectiveZones.IsValid(result.DirectiveZone))
         {
             ApplyDirective(n, result.DirectiveZone, 20f);
+            PublishStimulus(NpcStimulusKind.MeetingPressure, n.Pos, 0.7f, true,
+                $"A social directive sent {n.NpcName} to {result.DirectiveZone}.", radius: 14f, source: n);
             Toast($"{n.NpcName} is heading to the {result.DirectiveZone}. You asked nicely.", ToastKind.Success);
         }
     }
@@ -853,6 +1423,9 @@ public partial class GameMode : Node3D
         "reception" => new Vector3(0f, 0f, 17f),
         "closet" => new Vector3(27f, 0f, 11f),
         "coffeepoint" => new Vector3(25f, 0f, -19.2f),
+        "meeting_a" => new Vector3(-25f, 0f, 18f),
+        "meeting_b" => new Vector3(-12.5f, 0f, 18f),
+        "hr" => new Vector3(13.5f, 0f, 18f),
         "desk" => n.HomePos,
         "player" => Player != null ? Player.FeetPos : n.HomePos,
         _ => n.HomePos,
@@ -910,5 +1483,3 @@ public partial class GameMode : Node3D
     private static MeshInstance3D MakeBox(Vector3 size, Color c) =>
         new() { Mesh = new BoxMesh { Size = size }, MaterialOverride = MakeMat(c) };
 }
-
-
