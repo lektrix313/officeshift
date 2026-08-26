@@ -215,6 +215,7 @@ public partial class CaptureDriver : Node
         else if (_mode == "hr") HrStep(gm, p);
         else if (_mode == "wardrobe") WardrobeStep(gm, p);
         else if (_mode == "chaos") ChaosStep(gm, p);
+        else if (_mode == "missions") MissionsStep(gm, p);
         else SimStep(gm, p);
     }
 
@@ -395,5 +396,33 @@ public partial class CaptureDriver : Node
         }
         if (_frame == 120) TapE();
         if (_frame == 122) ReleaseE();
+    }
+
+    // accept OMNI-KEYS → email Keith to the break room → steal blueprints → win
+    private void MissionsStep(GameMode gm, PlayerController p)
+    {
+        if (_frame == 20 && !gm.Over)
+        {
+            gm.Started = true;
+            Input.MouseMode = Input.MouseModeEnum.Captured;
+        }
+
+        if (_frame == 30) gm.AcceptContractById("OMNI-KEYS");
+
+        Glide(p, _frame, 40, 130, 0f, 18.5f, 6.2f, 10.4f);
+        if (_frame == 135) TapE();
+        if (_frame == 137) ReleaseE();
+
+        if (_frame == 140)
+            gm.Portal?.ComposeTo("Keith", "sync", "Keith, meet me in the break room now. Bring the spreadsheet.");
+        if (_frame == 150) gm.CloseUI();
+
+        Glide(p, _frame, 150, 280, 6.2f, 10.4f, -21.5f, -15.8f);
+        if (_frame == 285) TapE();
+        if (_frame == 395) ReleaseE();
+
+        Glide(p, _frame, 400, 490, -21.5f, -15.8f, 26f, -11.5f);
+        if (_frame == 495) TapE();
+        if (_frame == 497) ReleaseE();
     }
 }

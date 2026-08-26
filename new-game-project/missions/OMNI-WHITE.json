@@ -1,0 +1,10 @@
+{
+  "id": "OMNI-WHITE",
+  "title": "The Whiteboard Whisperer",
+  "brief": "The break-room whiteboard has the Q3 org chart scrawled on it. Photograph it — but a ghost leaves no memories. Keep your maximum suspicion under 30 until the shift ends.",
+  "winLine": "The photo is blurry. The intel is not. You were never in that room.",
+  "objectives": [
+    { "type": "PHOTO_WHITEBOARD" },
+    { "type": "GHOST" }
+  ]
+}

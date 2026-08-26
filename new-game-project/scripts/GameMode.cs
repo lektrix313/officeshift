@@ -44,6 +44,10 @@ public partial class GameMode : Node3D
     private float _cameraCrimeUntil;
     private bool _onCameraToasted;
     private float _shiftElapsed;
+    public float MaxSusEver;
+    private readonly List<string> _doneObjectives = new();
+    private float _lureDwell;
+    public MissionContract Active => MissionManager.Active;
     private readonly StatsTracker _stats = new();
     public StatsTracker Stats => _stats;
 
@@ -69,6 +73,7 @@ public partial class GameMode : Node3D
     public override void _Ready()
     {
         Instance = this;
+        MissionManager.LoadAll();
 
         // ---- environment / lighting (port of init()) ----
         var env = new Godot.Environment
@@ -202,10 +207,21 @@ public partial class GameMode : Node3D
         TimeLeft -= dt;
         if (TimeLeft <= 0)
         {
-            EndGame(false, "The courier left without your package. Shift wasted. You're fired — from a job you never even had.");
+            bool ghost = Active.Objectives.Any(o => o.Type == "GHOST");
+            bool othersDone = Active.Objectives.Where(o => o.Type != "GHOST").All(o => ObjectiveDone(o));
+            if (ghost && othersDone && MaxSusEver < 30f)
+            {
+                CompleteObjective("GHOST");
+                EndGame(true, "Ghost protocol complete. No logs, no footage, no memories. You were never hired.");
+            }
+            else
+            {
+                EndGame(false, "The courier left without your package. Shift wasted. You're fired — from a job you never even had.");
+            }
             return;
         }
         if (AlertTimer > 0) AlertTimer -= dt;
+        MaxSusEver = System.MathF.Max(MaxSusEver, MaxSuspicionValue);
 
         _shiftElapsed += dt;
         VendingCooldown = System.MathF.Max(0f, VendingCooldown - dt);
@@ -301,6 +317,24 @@ public partial class GameMode : Node3D
         MaxSuspicionValue = AiDirector.Outputs.MaxSus;
         BeingWatched = AiDirector.Outputs.Watched;
         AlertTimer = ctx.AlertTimer; // guard logic may extend/consume it
+
+        // ---- mission objectives ----
+        foreach (var o in Active.Objectives)
+        {
+            if (o.Type != "LURE_NPC" || ObjectiveDone(o)) continue;
+            var npc = Npcs.Find(x => x.NpcName == o.Npc);
+            if (npc == null) continue;
+            if (MissionZones.Contains(o.Zone, npc.Pos))
+            {
+                _lureDwell += dt;
+                if (_lureDwell >= 3f)
+                {
+                    _lureDwell = 0f;
+                    CompleteObjective(o);
+                }
+            }
+            else _lureDwell = 0f;
+        }
 
         // ---- ambient chatter ----
         _chatterTimer -= dt;
@@ -411,6 +445,7 @@ public partial class GameMode : Node3D
         victim.KnockOut(flopDir);
         Blood!.Spawn(victim.Pos, 4, 1.1f);
         Stats.Bonks++;
+        CompleteKnockout(victim);
         Synth?.Bonk();
         Toast(wasAsleep
             ? $"{victim.NpcName} was already asleep. You just made it official. And messy."
@@ -550,6 +585,7 @@ public partial class GameMode : Node3D
         FlashCrime();
         victim.KnockOut(flopDir);
         Stats.Bonks++;
+        CompleteKnockout(victim);
         Synth?.Bonk();
         Toast(wasAsleep
             ? $"{victim.NpcName} was already asleep. The {itemType} made it official."
@@ -587,6 +623,60 @@ public partial class GameMode : Node3D
             n.StartCurious(pos, noiseRef, EvidenceKind.Noise);
         }
     }
+
+    private void CompleteKnockout(NpcBrain victim)
+    {
+        var o = Active.Objectives.FirstOrDefault(x =>
+            x.Type == "KNOCKOUT_NPC" && x.Npc == victim.NpcName && !ObjectiveDone(x));
+        if (o != null) CompleteObjective(o);
+    }
+
+    // ================= mission objectives =================
+
+    public MissionObjective? PendingObjective(string type) =>
+        Active.Objectives.FirstOrDefault(o => o.Type == type && !ObjectiveDone(o));
+
+    private static string ObjKey(MissionObjective o) => $"{o.Type}:{o.Npc}:{o.Zone}";
+
+    private bool ObjectiveDone(MissionObjective o) => _doneObjectives.Contains(ObjKey(o));
+
+    public void CompleteObjective(MissionObjective o)
+    {
+        string key = ObjKey(o);
+        if (_doneObjectives.Contains(key)) return;
+        _doneObjectives.Add(key);
+        Synth?.Success();
+        Toast($"OBJECTIVE COMPLETE — {ObjectiveLabel(o)}", ToastKind.Success);
+        if (Active.Objectives.All(ObjectiveDone))
+            EndGame(true, Active.WinLine);
+    }
+
+    public void CompleteObjective(string type) 
+    {
+        var o = Active.Objectives.FirstOrDefault(x => x.Type == type && !_doneObjectives.Contains(ObjKey(x)));
+        if (o != null) CompleteObjective(o);
+    }
+
+    public void AcceptContractById(string id)
+    {
+        var c = MissionManager.Loaded.FirstOrDefault(x => x.Id == id);
+        if (c == null) { Toast($"No contract '{id}' on the board.", ToastKind.Info); return; }
+        MissionManager.Accept(c);
+        _doneObjectives.Clear();
+        if (Player != null) { Player.HasBlueprint = false; Player.BlueprintSent = false; }
+        Toast($"CONTRACT ACCEPTED — {c.Title}. {c.Brief}", ToastKind.Chaos);
+        PushHud();
+    }
+
+    private static string ObjectiveLabel(MissionObjective o) => o.Type switch
+    {
+        "STEAL_BLUEPRINTS" => "Steal the blueprints",
+        "PHOTO_WHITEBOARD" => "Photograph the whiteboard",
+        "LURE_NPC" => $"Lure {o.Npc} into the {o.Zone}",
+        "GHOST" => "Ghost: finish under 30 suspicion",
+        "KNOCKOUT_NPC" => $"Bonk {o.Npc}. For the mission.",
+        _ => o.Type,
+    };
 
     // ================= scenario events =================
 
@@ -803,11 +893,11 @@ public partial class GameMode : Node3D
             CasePct = CaseEvidence,
         };
         bool channeling = Player != null && Player.ChannelProgressFraction >= 0;
-        s.Objectives.Add(("Infiltrate the server room",
-            Player != null && (Player.HasBlueprint || Player.BlueprintSent || channeling)));
-        s.Objectives.Add(("Steal the blueprints", Player != null && (Player.HasBlueprint || Player.BlueprintSent)));
-        s.Objectives.Add(("Mail them out via the mail trolley", Player != null && Player.BlueprintSent));
-        s.Objectives.Add(("Don't get caught (optional-ish)", false));
+        foreach (var o in Active.Objectives)
+        {
+            bool done = ObjectiveDone(o);
+            s.Objectives.Add((ObjectiveLabel(o), done));
+        }
         s.Stats = (Stats.Bonks, Stats.Hides, Stats.Reports, Stats.Disguises, Stats.Cleans);
         Hud.Push(s);
     }

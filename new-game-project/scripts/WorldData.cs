@@ -99,6 +99,8 @@ public static class WorldData
         // microwave (break room counter top) + fire alarm (wall by break room door)
         new(26.5f, 1.15f, -20.5f, 0.9f, 0.6f, 0.7f, Color.FromHtml("3a3f47"), Solid: false),
         new(12.3f, 1.5f, -9f, 0.16f, 0.3f, 0.16f, Color.FromHtml("c23a2b"), Solid: false),
+        // whiteboard (break room wall) — mission photography target
+        new(20f, 1.6f, -21.4f, 2.4f, 1.2f, 0.1f, Color.FromHtml("f2f2ee"), Solid: false),
     };
 
     // ---------- cubicle pods (world.ts lines 129-147) ----------

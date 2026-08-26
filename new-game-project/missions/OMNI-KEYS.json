@@ -1,0 +1,10 @@
+{
+  "id": "OMNI-KEYS",
+  "title": "The Keystroke Caper",
+  "brief": "Keith has been asking questions. Get him OUT of the farm — convince him to walk to the break room (talk, email, or desk-phone him) — then lift the blueprints while the farm is unwatched.",
+  "winLine": "Keith watched the break room. You watched the server room. Nobody watched you.",
+  "objectives": [
+    { "type": "LURE_NPC", "npc": "Keith", "zone": "breakroom" },
+    { "type": "STEAL_BLUEPRINTS" }
+  ]
+}

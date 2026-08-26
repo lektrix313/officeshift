@@ -96,6 +96,22 @@ fun-per-line-of-code. This file is the loop's persistent state.
   armed contact. Slip chain verified via code path + puddle visuals; capture
   run landed the mug intact (stochastic miss).
 
+### CYCLE 8 — mission contracts + composer (DONE, captured in gauntlet_missions.mp4)
+- [x] MissionContract data model + JSON loader (res://missions/ + user://missions/)
+      — adding a mission = dropping a JSON file, zero code
+- [x] Objective types: STEAL_BLUEPRINTS / PHOTO_WHITEBOARD (new break-room
+      whiteboard prop) / LURE_NPC (zone dwell) / GHOST (sub-30 sus to shift end)
+      / KNOCKOUT_NPC — each admits multiple solution routes
+- [x] OmniPortal CONTRACTS board (accept swaps the active mission + HUD
+      objectives) and COMPOSER tab (objective/NPC/zone dropdowns → writes
+      user://missions JSON → live on the board)
+- [x] Win rework: all-objectives-complete drives the ending; ghost contracts
+      win at shift timeout
+- [x] 3 authored contracts: OMNI-KEYS (lure+steal), OMNI-WHITE (photo+ghost),
+      OMNI-CHAIR (bonk+steal)
+- [x] Verified end-to-end: accept → email Keith → persona reply directive →
+      Keith walks to breakroom → LURE done → blueprints stolen → "PROMOTED"
+
 ## Backlog (next cycles, priority order)
 
 1. Physics props: grabbable papers/mugs/staplers, throwable with noise events ✅ (cycle 4)

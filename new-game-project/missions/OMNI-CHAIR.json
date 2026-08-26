@@ -1,0 +1,10 @@
+{
+  "id": "OMNI-CHAIR",
+  "title": "The Chair-man Cometh",
+  "brief": "Keith knows. Keith always knows. HR requires him to be 'temporarily horizontal'. A chair to the back is the company-approved method. Then steal the blueprints while everyone processes the noise.",
+  "winLine": "Keith is horizontal. The blueprints are vertical. Balance restored.",
+  "objectives": [
+    { "type": "KNOCKOUT_NPC", "npc": "Keith" },
+    { "type": "STEAL_BLUEPRINTS" }
+  ]
+}

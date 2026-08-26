@@ -13,7 +13,7 @@ public enum EvidenceKind { Blood, Body, Noise }
 
 public enum ToastKind { Info, Warn, Chaos, Success }
 
-public enum ChannelMode { None, Terminal, Mop, Coffee, Microwave, Tape }
+public enum ChannelMode { None, Terminal, Mop, Coffee, Microwave, Tape, Photo }
 
 public enum RoomId { Server, Printer, Break, Closet, Reception, Floor }
 
@@ -209,6 +209,7 @@ public sealed class HideSpotState
 
     public bool HasRoom => Occupants.Count < Capacity;
 }
+
 
 
 

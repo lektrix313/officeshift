@@ -46,6 +46,9 @@ public static class Interactables
         if (Near(feet, 27f, 11f, 1.9f))
             return new UseTarget("locker", $"E — Adopt {mode.NextUniformName()} from the uniform locker (HR-approved theft)", 0f);
 
+        if (Near(feet, 20f, -21.5f, 2.0f) && mode.PendingObjective("PHOTO_WHITEBOARD") != null)
+            return new UseTarget("whiteboard", "Hold E — Photograph the whiteboard (very corporate espionage)", 3f);
+
         if (Near(feet, 12.3f, -9f, 1.8f))
         {
             if (mode.AlarmCooldown > 0)

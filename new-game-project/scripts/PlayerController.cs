@@ -43,6 +43,7 @@ public partial class PlayerController : CharacterBody3D
         ChannelMode.Coffee => 2f,
         ChannelMode.Microwave => 3f,
         ChannelMode.Tape => 4f,
+        ChannelMode.Photo => 3f,
         _ => 1f,
     };
 
@@ -277,6 +278,7 @@ public partial class PlayerController : CharacterBody3D
                 ChannelMode.Coffee => new Vector3(25f, 0f, -20.4f),
                 ChannelMode.Microwave => new Vector3(26.5f, 0f, -20.5f),
                 ChannelMode.Tape => new Vector3(-2f, 0f, 19f),
+                ChannelMode.Photo => new Vector3(20f, 0f, -21.5f),
                 _ => null,
             };
             bool near = targetPos.HasValue && FeetPos.DistanceTo(targetPos.Value) < Bal.InteractRange + 0.3f;
@@ -328,6 +330,9 @@ public partial class PlayerController : CharacterBody3D
                             break;
                         case ChannelMode.Tape:
                             Mode.DeleteTapes();
+                            break;
+                        case ChannelMode.Photo:
+                            Mode.CompleteObjective("PHOTO_WHITEBOARD");
                             break;
                     }
                 }
@@ -384,7 +389,7 @@ public partial class PlayerController : CharacterBody3D
             BlueprintSent = true;
             Mode.Synth?.Success();
             Mode.Toast("Blueprints mailed to \"definitely not a rival company\".", ToastKind.Success);
-            Mode.EndGame(true, "Blueprint delivered. OmniCore never stood a chance.");
+            Mode.CompleteObjective("STEAL_BLUEPRINTS");
             return;
         }
         // 3. terminal
@@ -460,6 +465,11 @@ public partial class PlayerController : CharacterBody3D
                     return;
                 case "locker":
                     Mode.CycleUniform();
+                    return;
+                case "whiteboard":
+                    ChannelMode = ChannelMode.Photo;
+                    ChannelT = 0;
+                    Mode.Toast("Photographing proprietary strategy. For a rival. Obviously.", ToastKind.Warn);
                     return;
                 case "tapes":
                     ChannelMode = ChannelMode.Tape;
