@@ -68,6 +68,17 @@ fun-per-line-of-code. This file is the loop's persistent state.
 - Design note: cooling requires tapes only (blood cleanup feeds forensics in a
   later cycle).
 
+### CYCLE 6 — disguise wardrobe (DONE, captured in gauntlet_wardrobe.mp4)
+- [x] Uniform locker in the supply closet: cycles IT / Facilities / HR / Sales
+- [x] IT: server-room presence is not suspicious ("The server room is YOUR
+      room now") — verified: loitering at the blueprint terminal, 0% suspicion
+- [x] Facilities: mopping registers zero suspicious activity
+- [x] Sales: creep/crab-walk suspicion halved ("nobody questions Sales")
+- [x] HR: blazer equipped (email-favorability hooks reserved for cycle 7)
+- Bugs found by capture: papers stack spawned off-desk on a walk path →
+  player depenetration machine-gunned noise toasts; fixed (desk placement +
+  3s per-item noise debounce + papers verb grammar).
+
 ## Backlog (next cycles, priority order)
 
 1. Physics props: grabbable papers/mugs/staplers, throwable with noise events ✅ (cycle 4)

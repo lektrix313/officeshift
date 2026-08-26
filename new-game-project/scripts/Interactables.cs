@@ -33,6 +33,9 @@ public static class Interactables
             return new UseTarget("tapes", "Hold E — Shred tonight's tapes. The truth dies with them.", 4f);
         }
 
+        if (Near(feet, 27f, 11f, 1.9f))
+            return new UseTarget("locker", $"E — Adopt {mode.NextUniformName()} from the uniform locker (HR-approved theft)", 0f);
+
         if (Near(feet, 12.3f, -9f, 1.8f))
         {
             if (mode.AlarmCooldown > 0)

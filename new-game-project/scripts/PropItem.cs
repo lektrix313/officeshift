@@ -11,7 +11,9 @@ public partial class PropItem : RigidBody3D
     public float NoiseRadius { get; private set; } = 6f;
     public bool Breakable { get; private set; }
     private bool _armed;
+    private ulong _lastNoiseMsec;
 
+    public static string NoiseVerb(string type) => type == "papers" ? "scatter noisily" : "clatter loudly";
     private static StandardMaterial3D MakeMat(string type) => type switch
     {
         "mug" => new StandardMaterial3D { AlbedoColor = Color.FromHtml("e8e8e8"), Roughness = 0.6f },
@@ -95,6 +97,11 @@ public partial class PropItem : RigidBody3D
         if (!_armed) return;
         float speed = LinearVelocity.Length();
         if (speed < 1.8f) return;
+
+        // debounce: settling/bumps shouldn't machine-gun the office
+        ulong now = Time.GetTicksMsec();
+        if (now - _lastNoiseMsec < 3000) return;
+        _lastNoiseMsec = now;
 
         float radius = NoiseRadius * (Breakable && speed > 4.5f ? 1.4f : 1f);
         GameMode.Instance?.OnNoise(GlobalPosition, radius, ItemType, Breakable && speed > 4.5f);

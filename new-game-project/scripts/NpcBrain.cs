@@ -13,6 +13,7 @@ public sealed class AiContext
     public bool PlayerCrouching;
     public bool PlayerCarrying;
     public string? PlayerDisguise;
+    public string? PlayerDept;
     public float PlayerActivity;            // playerSusActivity() port: 0, 1, 1.5, 2.5 or 3
     public NpcBrain? Guard;
     public required List<NpcBrain> Npcs;
@@ -458,9 +459,10 @@ public static class AiDirector
                 }
                 else if (seesPlayer && ctx.PlayerActivity == 0)
                 {
+                    float deptMul = ctx.PlayerDept == "Sales" ? 0.5f : 1f; // nobody questions Sales
                     if (playerDist < Bal.CreepRange)
                     {
-                        n.AddSuspicion(Bal.CreepRate * n.Spec.Rate * disguiseMul * (float)dt);
+                        n.AddSuspicion(Bal.CreepRate * n.Spec.Rate * disguiseMul * deptMul * (float)dt);
                         if (!n.CreepToastDone && n.Suspicion > 15)
                         {
                             n.CreepToastDone = true;
@@ -469,7 +471,7 @@ public static class AiDirector
                     }
                     else if (ctx.PlayerCrouching && playerDist < Bal.CrabRange)
                     {
-                        n.AddSuspicion(Bal.CrabRate * n.Spec.Rate * disguiseMul * (float)dt);
+                        n.AddSuspicion(Bal.CrabRate * n.Spec.Rate * disguiseMul * deptMul * (float)dt);
                         if (!n.CrabToastDone && n.Suspicion > 12)
                         {
                             n.CrabToastDone = true;

@@ -231,7 +231,7 @@ public static class WorldData
         new("papers", 5f, 0.55f, 2f),
         new("keyboard", 6.2f, 0.55f, 6.6f),
         new("mug", 16.2f, 0.55f, 9f),
-        new("papers", -6.2f, 0.55f, -7f),
+        new("papers", -6.2f, 0.55f, -5f),
         new("stapler", 2f, 1.25f, 17.2f),
     };
 

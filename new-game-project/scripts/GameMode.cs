@@ -272,6 +272,7 @@ public partial class GameMode : Node3D
             PlayerCrouching = Player.Crouching,
             PlayerCarrying = Player.Carrying != null,
             PlayerDisguise = Player.DisguiseOf,
+            PlayerDept = Player.DepartmentDisguise,
             PlayerActivity = Player.PlayerSusActivity(),
             Guard = Guard,
             Npcs = Npcs,
@@ -550,7 +551,7 @@ public partial class GameMode : Node3D
         Synth?.Bonk();
         Toast(shattered
             ? $"The {itemType} SHATTERS across the floor. Everyone heard that."
-            : $"The {itemType} clatters loudly. Everyone within earshot heard that.", ToastKind.Warn);
+            : $"The {itemType} {PropItem.NoiseVerb(itemType)}. Everyone within earshot heard that.", ToastKind.Warn);
 
         foreach (var n in Npcs)
         {
@@ -574,6 +575,31 @@ public partial class GameMode : Node3D
         TapeShredded = true;
         Synth?.Pickup();
         Toast("Tapes shredded. The case is bleeding out. Stay clean.", ToastKind.Success);
+    }
+
+    private static readonly string[] UniformCycle = { "IT", "Facilities", "HR", "Sales" };
+
+    public string NextUniformName()
+    {
+        var cur = Player?.DepartmentDisguise;
+        int idx = cur == null ? -1 : System.Array.IndexOf(UniformCycle, cur);
+        return UniformCycle[(idx + 1) % UniformCycle.Length];
+    }
+
+    public void CycleUniform()
+    {
+        if (Player == null) return;
+        var next = NextUniformName();
+        Player.DepartmentDisguise = Player.DepartmentDisguise == next ? null : next;
+        Synth?.Pickup();
+        Toast(next switch
+        {
+            "IT" => "IT uniform on. The server room is YOUR room now.",
+            "Facilities" => "Facilities overalls on. Nobody sees the cleaner. Nobody ever sees the cleaner.",
+            "HR" => "HR blazer on. People will tell you things. Voluntarily. Terrifying.",
+            "Sales" => "Sales lanyard on. Nobody knows what Sales does — including Sales.",
+            _ => "Uniform off. You are a nameless new hire again.",
+        }, ToastKind.Success);
     }
 
     public void SpikeCoffee()
@@ -724,6 +750,7 @@ public partial class GameMode : Node3D
                 HeldItem.EnergyDrink => "[energy drink]",
                 _ => null,
             },
+            Dept = Player?.DepartmentDisguise,
             CaseActive = CaseActive,
             CasePct = CaseEvidence,
         };

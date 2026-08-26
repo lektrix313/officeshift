@@ -17,6 +17,7 @@ public partial class PlayerController : CharacterBody3D
     public bool HasBlueprint { get; set; }
     public bool BlueprintSent { get; set; }
     public string? DisguiseOf { get; set; }
+    public string? DepartmentDisguise { get; set; }
     public NpcBrain? Carrying { get; set; }
     public PropItem? HeldProp { get; set; }
     public HeldItem HeldItem { get; set; }
@@ -445,6 +446,9 @@ public partial class PlayerController : CharacterBody3D
                 case "firealarm":
                     Mode.PullFireAlarm();
                     return;
+                case "locker":
+                    Mode.CycleUniform();
+                    return;
                 case "tapes":
                     ChannelMode = ChannelMode.Tape;
                     ChannelT = 0;
@@ -661,9 +665,11 @@ public partial class PlayerController : CharacterBody3D
     {
         float sus = 0;
         var room = WorldRef.RoomAt(FeetPos.X, FeetPos.Z);
-        if (room == RoomId.Server && DisguiseOf == null) sus = System.MathF.Max(sus, 1f);
+        bool itBadge = DepartmentDisguise == "IT";
+        if (room == RoomId.Server && DisguiseOf == null && !itBadge) sus = System.MathF.Max(sus, 1f);
         if (ChannelT >= 0 && ChannelMode == ChannelMode.Terminal) sus = System.MathF.Max(sus, 2.5f);
-        if (ChannelT >= 0 && ChannelMode == ChannelMode.Mop) sus = System.MathF.Max(sus, 1.5f);
+        if (ChannelT >= 0 && ChannelMode == ChannelMode.Mop)
+            sus = System.MathF.Max(sus, DepartmentDisguise == "Facilities" ? 0f : 1.5f);
         if (Carrying != null) sus = System.MathF.Max(sus, 3f);
         return sus;
     }

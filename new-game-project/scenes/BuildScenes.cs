@@ -213,6 +213,7 @@ public partial class CaptureDriver : Node
         if (_mode == "portal") PortalStep(gm, p);
         else if (_mode == "props") PropsStep(gm, p);
         else if (_mode == "hr") HrStep(gm, p);
+        else if (_mode == "wardrobe") WardrobeStep(gm, p);
         else SimStep(gm, p);
     }
 
@@ -349,5 +350,27 @@ public partial class CaptureDriver : Node
         Glide(p, _frame, 245, 330, 26.5f, -19.5f, -2f, 19f);
         if (_frame == 340) TapE();
         if (_frame == 465) ReleaseE();
+    }
+
+    // locker → IT uniform → loiter in the server room with zero suspicion
+    private void WardrobeStep(GameMode gm, PlayerController p)
+    {
+        if (_frame == 20 && !gm.Over)
+        {
+            gm.Started = true;
+            Input.MouseMode = Input.MouseModeEnum.Captured;
+        }
+
+        Glide(p, _frame, 20, 110, 0f, 18.5f, 27f, 12.2f);
+        if (_frame == 115) TapE();
+        if (_frame == 117) ReleaseE();
+
+        Glide(p, _frame, 120, 210, 27f, 12.2f, -21.5f, -15.8f);
+
+        if (_frame == 220)
+        {
+            var dir = (new Vector3(-22f, 0f, -17.2f) - p.FeetPos).Normalized();
+            p.Yaw = System.MathF.Atan2(-dir.X, -dir.Z);
+        }
     }
 }

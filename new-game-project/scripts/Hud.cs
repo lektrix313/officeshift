@@ -24,6 +24,7 @@ public sealed class HudSnapshot
     public float MaxSuspicion;
     public bool BeingWatched;
     public string? Held;
+    public string? Dept;
     public bool CaseActive;
     public float CasePct;
     public List<(string Label, bool Done)> Objectives { get; } = new();
@@ -179,6 +180,7 @@ public partial class Hud : CanvasLayer
 
         var bits = new List<string>();
         if (s.Held != null) bits.Add(s.Held);
+        if (s.Dept != null) bits.Add($"[{s.Dept} uniform]");
         if (s.Carrying != null) bits.Add($"carrying {s.Carrying}");
         if (s.Disguise != null) bits.Add($"disguised as \"{s.Disguise}\"");
         if (s.Crouching) bits.Add("crouching");
