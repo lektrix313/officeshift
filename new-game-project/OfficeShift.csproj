@@ -1,0 +1,13 @@
+<Project Sdk="Godot.NET.Sdk/4.7.2">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <!-- MUST equal application/config/name verbatim (spaces included): Godot 4.7
+         resolves the C# project assembly by that exact string. Mismatch = silent
+         ".NET: Failed to load project assembly" and unresolvable scripts. -->
+    <AssemblyName>Office Shift</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>12</LangVersion>
+  </PropertyGroup>
+</Project>
