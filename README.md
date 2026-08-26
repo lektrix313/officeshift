@@ -1,90 +1,217 @@
-# Office Shift Workshop
+# Office Shift
 
-The root Vite app is now the early-access workshop for designing Office Shift
-infiltration levels. Open the grid-first level designer to place rooms, doors,
-cubicles, props, access-card gates, and multi-floor plans, then export both a
-portable workshop JSON and a Godot-oriented JSON payload. The existing playable
-prototype is available from the workshop's Play control.
+## The world's worst nine-to-five
 
-## Workshop loop
+**Office Shift** is a darkly comic stealth sandbox about surviving one ordinary workday in a deeply suspicious office.
 
-- Place and drag elements on a 1-cell snap grid.
-- Tag each element with a designated room, department, gameplay footprint, and required keycard.
-- Define access cards and mark whether they can be obtained by Steal, Gaslight, Charm, Seduce, or Impersonate.
-- Use procedural dressing for non-gameplay lights, pictures, plants, and clutter.
-- Resolve validation warnings before exporting for Godot.
+You arrive with a simple objective: get something done before five o'clock.
 
-Run with `npm run dev`.
+Unfortunately, the office is full of cameras, locked rooms, gossip, fragile egos, malfunctioning equipment, secret relationships, HR paperwork, and coworkers who remember just enough to become dangerous.
 
+You are not a super-soldier. You are an employee trying to look like you belong.
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+That is the entire challenge.
 
-Currently, two official plugins are available:
+## The pitch
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Imagine a workplace simulator where every office object can become part of a plan.
 
-## React Compiler
+A printer runs out of paper and three people leave their desks. Someone follows them to complain. You use the empty cubicles to slip into a restricted corridor. A stolen uniform gets you past reception, but the wrong person recognizes the badge. You blame the missing files on Gary, send a convincing email from his computer, and watch the office slowly decide that Gary has always been a problem.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Then the fire alarm goes off.
 
-## Expanding the ESLint configuration
+The plan falls apart. Everyone moves. Someone finds the evidence. HR opens a case. You have ten minutes to clean up, redirect suspicion, or become the only person in the building who looks calm.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+Every shift is a chain reaction built from ordinary workplace problems.
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Your player fantasy
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+You are an infiltrator hiding inside a functioning workplace.
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+You can play the shift as:
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+- A careful professional who completes objectives without attracting attention.
+- A social manipulator who charms, distracts, gaslights, and recruits coworkers.
+- A department impersonator who steals uniforms and moves through the building under a new identity.
+- A chaos agent who weaponizes coffee, printers, alarms, spills, gossip, and office politics.
+- A forensic cleaner who hides bodies, removes blood, destroys footage, and controls what survives the day.
+- A conspirator who frames other staff members and turns the office against itself.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+The game does not ask you to find one correct solution. It asks whether you can make your solution look like something an office would naturally do.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## One shift, one hour
+
+A complete workday lasts one hour in real time, from 9:00 AM to 5:00 PM.
+
+During the shift, staff follow their own routines. They work at desks, print documents, make calls, attend meetings, take breaks, visit the bathroom, scroll on their phones, gather around the water cooler, and wander when they should be working.
+
+Their moods and attention change throughout the day. Someone can be happy in the morning, distracted after lunch, anxious before a meeting, and completely unable to focus after the printer jams for the third time.
+
+You have to work around that rhythm. A normal-looking moment is valuable: it gives you cover, makes your movement believable, and lets the office reset after your last mistake.
+
+## The core loop
+
+1. **Read the room.** Learn who is watching, who is distracted, which doors are restricted, and where staff are supposed to be.
+2. **Choose an objective.** Steal information, deliver something, lure someone away, photograph a plan, remove evidence, or complete a contract without being exposed.
+3. **Create an opening.** Use a conversation, an email, a phone call, a coffee break, a printer problem, a meeting, or a carefully placed distraction.
+4. **Move through the office.** Walk, crouch, carry objects, use disguises, access keycard doors, and behave like the person you are pretending to be.
+5. **Manage the consequences.** Staff notice events, form memories, spread rumors, report incidents, panic, investigate, flee, or decide that somebody else is responsible.
+6. **Leave a believable story behind.** Clean the scene, destroy footage, repair the problem, frame a suspect, or make the whole thing look like another bad day at work.
+
+## The consequence engine
+
+The office is not a collection of guards waiting for the player. It is a social system.
+
+Every meaningful event can spread through the staff network:
+
+- A noise can attract the curious and distract nearby workers.
+- A body or bloodstain can trigger investigation, panic, a report, and an HR case.
+- A hacked computer can make technical staff investigate and anti-technology staff complain.
+- A failed keycard swipe can make security more alert and impatient staff more frustrated.
+- A fire alarm can evacuate the whole floor and completely rewrite everyone's position.
+- A rumor can gain confidence as it travels, or become distorted enough to implicate the wrong person.
+- A kind act, successful repair, coffee, water, or a good meeting can calm people and restore comfort.
+
+Object-state events are spatial. Staff only react when they are within the object's configured radius, unless they are actively trying to use that object. A fire alarm is deliberately floor-wide; a jammed printer is not.
+
+Each employee responds according to personality, attention, stress, patience, department preferences, and distance from the event. The same incident can make one person investigate, another call IT, another flee, and another quietly decide it is not worth getting involved.
+
+The most dangerous evidence is not always the loudest evidence. It is the story people agree on afterward.
+
+## Staff are characters, not obstacles
+
+Every named employee has a personality, a secret, a behavioral tell, and a daily routine.
+
+Staff can be nosy, social, conscientious, neurotic, patient, lazy, suspicious, protective of their department, friendly toward IT or HR, or completely overwhelmed and barely paying attention.
+
+Their personalities affect how quickly they activate, how long they remember, what makes them stressed, which problems they tolerate, and whether they ask for help or make the situation worse.
+
+A coworker who hates IT becomes frustrated by a computer glitch much faster than a technical employee. A social worker may treat a broken water cooler as an invitation to talk. A security-minded employee may notice that a door was opened even when nobody saw who opened it.
+
+Staff can also be influenced. Talk to them, email them, give them a reason to leave their desk, make them doubt their memory, or make them feel that helping you is their own idea.
+
+## The office is your toolbox
+
+The office is full of ordinary objects with useful states, histories, and consequences.
+
+### Work equipment
+
+Printers can be working, out of paper, jammed, offline, or broken. Computers can glitch, go offline, be hacked, or call IT. Phones can lure people away, create a meeting, or become evidence. Projectors, server racks, terminals, cameras, shredders, and noticeboards can all become opportunities or liabilities.
+
+### Comfort and distraction
+
+Coffee makers, microwaves, vending machines, water coolers, refrigerators, lunch containers, mugs, plants, chairs, and meeting tables shape how staff feel and where they go.
+
+A working coffee machine can pull people away from their desks. A spilled drink can create a hazard. A missing lunch can start a personal investigation. A broken chair can turn a quiet employee into Facilities' newest complaint.
+
+Not every interaction is negative. Fixing a problem, providing comfort, or helping the office function can lower stress and make employees more cooperative.
+
+### Evidence and disposal
+
+Paper stacks, filing cabinets, shredders, garbage bins, recycling bins, garbage chutes, supply shelves, lockers, and restricted disposal rooms give you ways to hide, move, destroy, or plant evidence.
+
+A hidden body is not permanently solved. Over time, it can create a smell, attract the nearest staff member, and begin a new chain of consequences. Disposal routes are safer, but each one has its own access requirements and risks.
+
+### Access and identity
+
+Doors, keycard readers, elevators, stairwells, server terminals, lockers, cabinets, and the incinerator can all be restricted.
+
+Keycards are progression items and social leverage. You can acquire access by stealing a card, borrowing it without permission, following its owner, gaslighting someone into opening a door, charming or seducing the right employee, impersonating a department member, using a distraction, or finding another route through the building.
+
+A locked door is not just a wall. It is a question: who is allowed to open it, who knows that, and what story can you tell when the reader rejects you?
+
+## Framing and office politics
+
+The consequence engine supports more than hiding your own crimes. You can build a case against another employee for murder, theft, sabotage, harassment, missing files, hacked equipment, or suspicious access.
+
+To make a frame believable, you need more than one planted clue. You need a suspect with a reason, a witness with enough confidence, a trail of office memories, and a story that survives questioning.
+
+HR cases grow through reports, rumors, camera evidence, and testimony. Witnesses can contradict one another. Their confidence decays. They can be challenged, coached, intimidated, or allowed to repeat the version of events that benefits you.
+
+A weak case can collapse during an appeal. A strong case can remove an innocent employee from the office and replace them with someone new, changing the social landscape of the next shift.
+
+## The OmniPortal
+
+The OmniPortal is the office's digital nervous system.
+
+From a desk computer, you can read incoming mail, send messages, lure people to specific places, ask for favors, create misunderstandings, coordinate meetings, read office chatter, review contracts, file reports, inspect HR cases, and speak directly to employees.
+
+People reply according to who they are. A message to a nervous employee may create a very different result from the same message sent to a confident gossip.
+
+The best messages do not sound like commands. They sound like something the recipient already wanted to do.
+
+## Missions and contracts
+
+Contracts give you a goal and a reason to enter the office's social machinery.
+
+Examples include:
+
+- Lure an employee away from their desk, then steal the information they were guarding.
+- Photograph a whiteboard without being identified on camera.
+- Enter the server room, access the terminal, and deliver the blueprints through the mail trolley.
+- Knock out a target and complete the shift before anyone connects the incident to you.
+- Complete the entire contract while keeping suspicion below a strict limit.
+- Remove a body, destroy the evidence, and survive the investigation that follows.
+- Frame a named employee and get the case through HR before the shift ends.
+
+Contracts support multiple solutions. The route you take becomes part of the story you create.
+
+## The first office
+
+The first office is built around a readable central corridor and a dense cubicle floor, with connected spaces for stealth, social play, and body-related scenarios.
+
+It includes reception, a broad cubicle farm, two meeting rooms, an HR suite, a restricted server room, printer and supply areas, a break room, storage, lockers, disposal routes, cameras, keycard readers, corridors, and alternate paths.
+
+The visual target is a bright, low-poly office that is easy to read at a glance: white walls, blue-gray flooring, warm wood desks, glass and cubicle partitions, large windows, framed art, plants, filing cabinets, visible clocks, clear exit signs, and a wide central walkway.
+
+The cheerful office surface is important. The worse the situation becomes, the more absurd it is that everything still looks like a normal workplace.
+
+## Progression and bigger businesses
+
+The first office teaches movement, observation, disguises, social manipulation, keycards, object states, evidence, staff routines, and consequence management.
+
+Later businesses become larger and more complicated:
+
+- Multiple floors with elevators and stairwells.
+- More departments with competing priorities.
+- Stronger access hierarchies and department-specific cards.
+- More cameras, records, and security procedures.
+- Larger staff populations with relationships and group loyalties.
+- More meeting rooms, private offices, server spaces, archives, kitchens, and disposal routes.
+- New rules for each workplace that change what counts as suspicious.
+
+A janitor's card might open an incinerator room. Gary's card might reach level-three Accounts. An HR badge might grant access to personnel files but make Security watch you more closely.
+
+Progression is not only about unlocking doors. It is about learning how each business thinks.
+
+## The level designer vision
+
+The long-term goal is a friendly office and business level designer where new workplaces can be assembled from simple pieces: walls, glass walls, doorways, doors, cubicles, offices, reception areas, meeting rooms, desks, chairs, printers, kitchens, server rooms, stairs, elevators, corridors, props, clutter, plants, pictures, signs, paperwork, department tags, keycard requirements, and alternate access routes.
+
+A designer should be able to sketch a business, place its important objects, assign departments, mark the access hierarchy, and immediately understand how staff and player strategies will flow through it.
+
+Every object should be replaceable with a better visual asset without losing its identity as a gameplay object.
+
+## Why it is fun
+
+Office Shift turns familiar workplace behavior into a stealth language.
+
+You are not hiding from monsters. You are hiding from coworkers who have meetings in ten minutes, a spreadsheet due by lunch, and strong opinions about who belongs in the server room.
+
+The tension comes from being almost believable.
+
+You can get away with something outrageous if the timing is right, the witnesses are distracted, and the story is better than the truth. You can fail because a printer jams at exactly the wrong moment, because someone remembers your shoes, or because the person you framed gives a more convincing account of the morning.
+
+The result is a game where every shift creates stories worth retelling:
+
+> “I only needed Gary's keycard. Then the printer broke, I lured Accounts into a meeting, hid a body in the supply closet, blamed the whole thing on a hacked noticeboard, and escaped during the fire drill.”
+
+That is an ordinary day at the office.
+
+## Workshop
+
+The project also includes an early level-design workshop for building new Office Shift businesses. It is intended to make offices easy to sketch, expand, and understand: place rooms and props, mark departments and keycard gates, add alternate routes, and design the social spaces where the next disaster will happen.
+
+The workshop is part of the game's future, not the game itself. The game is the office, the people inside it, and the increasingly unbelievable stories you manage to leave behind.
+
+**Office Shift is a stealth comedy about making bad decisions look like workplace procedure.**
