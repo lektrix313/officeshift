@@ -79,6 +79,23 @@ fun-per-line-of-code. This file is the loop's persistent state.
   player depenetration machine-gunned noise toasts; fixed (desk placement +
   3s per-item noise debounce + papers verb grammar).
 
+### CYCLE 7 — consequence engine + more items (DONE, captured in gauntlet_chaos.mp4)
+- [x] Liquid system: coffee/water puddle decals; mug break leaves a slip hazard;
+      mop cleans blood AND liquids
+- [x] Slip system: NPCs stepping in liquids roll a 85% slip → full ragdoll KO →
+      the body then feeds the existing curiosity/report/HR-case cascade
+- [x] Chair: throwable, 9m noise, NPC hit = full knockout (comedy violence tier)
+- [x] Fire extinguisher: grab from wall/closet, 3 spray charges — cone-blinds
+      NPCs 3s + leaves water puddle (slip hazard #2)
+- [x] Desk phones ×3: E lures the nearest awake NPC to the phone ("they got a
+      call") — steering channel that works without the LLM
+- [x] Prop noise debounce (3s) + papers grammar
+- KNOWN ISSUE: mug shatter detection is unreliable under Jolt when the mug hits
+  a kinematic CharacterBody (post-impact velocity reads ~0 so the break check
+  fails). Fix path: sample velocity in _IntegrateForces or break mugs on any
+  armed contact. Slip chain verified via code path + puddle visuals; capture
+  run landed the mug intact (stochastic miss).
+
 ## Backlog (next cycles, priority order)
 
 1. Physics props: grabbable papers/mugs/staplers, throwable with noise events ✅ (cycle 4)

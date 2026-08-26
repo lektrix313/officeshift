@@ -233,6 +233,18 @@ public static class WorldData
         new("mug", 16.2f, 0.55f, 9f),
         new("papers", -6.2f, 0.55f, -5f),
         new("stapler", 2f, 1.25f, 17.2f),
+        new("chair", -8f, 0.55f, 3f),
+        new("chair", 18f, 0.55f, -12f),
+        new("extinguisher", 14.5f, 0.5f, -19.5f),
+        new("extinguisher", 24f, 0.5f, 10.5f),
+    };
+
+    /// <summary>Desk phones: E lures the nearest awake NPC to the phone (they "got a call").</summary>
+    public static readonly (float X, float Z)[] Phones =
+    {
+        (2f, 17f),
+        (-13.8f, -5.4f),
+        (16.2f, 8.4f),
     };
 
     /// <summary>Ported verbatim from world.ts roomAt().</summary>

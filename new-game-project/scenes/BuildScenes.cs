@@ -214,6 +214,7 @@ public partial class CaptureDriver : Node
         else if (_mode == "props") PropsStep(gm, p);
         else if (_mode == "hr") HrStep(gm, p);
         else if (_mode == "wardrobe") WardrobeStep(gm, p);
+        else if (_mode == "chaos") ChaosStep(gm, p);
         else SimStep(gm, p);
     }
 
@@ -372,5 +373,27 @@ public partial class CaptureDriver : Node
             var dir = (new Vector3(-22f, 0f, -17.2f) - p.FeetPos).Normalized();
             p.Yaw = System.MathF.Atan2(-dir.X, -dir.Z);
         }
+    }
+
+    // grab mug → throw into the walkway → coffee puddle → NPC slips → KO → curiosity
+    private void ChaosStep(GameMode gm, PlayerController p)
+    {
+        if (_frame == 20 && !gm.Over)
+        {
+            gm.Started = true;
+            Input.MouseMode = Input.MouseModeEnum.Captured;
+        }
+
+        Glide(p, _frame, 20, 100, 0f, 18.5f, -16.5f, -3.6f);
+        if (_frame == 105) TapE();
+        if (_frame == 107) ReleaseE();
+
+        if (_frame == 115)
+        {
+            var dir = (new Vector3(-10f, 0f, -2.5f) - p.FeetPos).Normalized();
+            p.Yaw = System.MathF.Atan2(-dir.X, -dir.Z);
+        }
+        if (_frame == 120) TapE();
+        if (_frame == 122) ReleaseE();
     }
 }

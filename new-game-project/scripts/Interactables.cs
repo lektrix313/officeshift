@@ -33,6 +33,16 @@ public static class Interactables
             return new UseTarget("tapes", "Hold E — Shred tonight's tapes. The truth dies with them.", 4f);
         }
 
+        foreach (var ph in WorldData.Phones)
+        {
+            if (Near(feet, ph.X, ph.Z, 1.6f))
+            {
+                if (mode.PhoneCooldown > 0)
+                    return new UseTarget("phone", $"The line is busy… ({(int)System.MathF.Ceiling(mode.PhoneCooldown)}s)", 0f);
+                return new UseTarget("phone", "E — Desk phone. Someone's about to get a very urgent call.", 0f);
+            }
+        }
+
         if (Near(feet, 27f, 11f, 1.9f))
             return new UseTarget("locker", $"E — Adopt {mode.NextUniformName()} from the uniform locker (HR-approved theft)", 0f);
 

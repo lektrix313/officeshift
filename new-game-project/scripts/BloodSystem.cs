@@ -1,4 +1,4 @@
-using Godot;
+﻿using Godot;
 using System.Collections.Generic;
 
 /// <summary>
@@ -12,14 +12,73 @@ public partial class BloodSystem : Node3D
     public sealed record Splat(Decal Node, Vector3 Pos);
 
     private readonly List<Splat> _splats = new();
+    private readonly List<Splat> _liquids = new();
     public IReadOnlyList<Splat> All => _splats;
+    public IReadOnlyList<Splat> Liquids => _liquids;
 
     private Texture2D? _bloodTex;
+    private Texture2D? _coffeeTex;
+    private Texture2D? _waterTex;
     private readonly Random _rng = new();
 
     public override void _Ready()
     {
         _bloodTex = MakeBloodTexture();
+        _coffeeTex = MakeLiquidTexture(new(0.35f, 0.2f, 0.08f, 0.95f), new(0.2f, 0.1f, 0.04f, 0f));
+        _waterTex = MakeLiquidTexture(new(0.55f, 0.75f, 0.9f, 0.55f), new(0.4f, 0.55f, 0.75f, 0f));
+    }
+
+    /// <summary>Uniform-blob liquid texture (coffee / water) for slip puddles.</summary>
+    private static ImageTexture MakeLiquidTexture(Color inner, Color edge)
+    {
+        const int size = 128;
+        var img = Image.CreateEmpty(size, size, false, Image.Format.Rgba8);
+        float cx = size / 2f, cy = size / 2f, r = 44f;
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                float d = System.MathF.Sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy)) / r;
+                if (d > 1f) continue;
+                float wobble = 1f + 0.18f * System.MathF.Sin(x * 0.35f) * System.MathF.Cos(y * 0.3f);
+                float t = Util.Clamp(d / wobble, 0f, 1f);
+                img.SetPixel(x, y, inner.Lerp(edge, t));
+            }
+        return ImageTexture.CreateFromImage(img);
+    }
+
+    /// <summary>Slippery puddle (coffee spill / extinguisher spray). NPCs who step in may slip.</summary>
+    public void SpawnLiquid(Vector3 pos, string kind)
+    {
+        var tex = kind == "coffee" ? _coffeeTex : _waterTex;
+        if (tex == null) return;
+        var decal = new Decal
+        {
+            TextureAlbedo = tex,
+            Size = new Vector3(1.3f, 0.05f, 1.3f),
+            Position = new Vector3(pos.X, 0.025f, pos.Z),
+        };
+        AddChild(decal);
+        _liquids.Add(new Splat(decal, decal.Position));
+        while (_liquids.Count > 24)
+        {
+            var old = _liquids[0];
+            _liquids.RemoveAt(0);
+            old.Node.QueueFree();
+        }
+    }
+
+    public Splat? NearestLiquidTo(Vector3 pos, float range)
+    {
+        Splat? best = null;
+        float bestDist = range;
+        foreach (var l in _liquids)
+        {
+            float dx = l.Pos.X - pos.X;
+            float dz = l.Pos.Z - pos.Z;
+            float d = System.MathF.Sqrt(dx * dx + dz * dz);
+            if (d < bestDist) { best = l; bestDist = d; }
+        }
+        return best;
     }
 
     /// <summary>Procedural 128x128 splat texture — port of makeBloodTexture(): ~9 radial blobs.</summary>
@@ -106,6 +165,12 @@ public partial class BloodSystem : Node3D
         _splats.Remove(s);
     }
 
+    public void RemoveLiquid(Splat l)
+    {
+        l.Node.QueueFree();
+        _liquids.Remove(l);
+    }
+
     public Splat? NearestTo(Vector3 pos, float range)
     {
         Splat? best = null;
@@ -126,3 +191,4 @@ public partial class BloodSystem : Node3D
 
     public bool Contains(Splat s) => _splats.Contains(s);
 }
+

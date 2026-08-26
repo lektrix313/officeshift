@@ -314,6 +314,8 @@ public partial class PlayerController : CharacterBody3D
                         case ChannelMode.Mop:
                             if (ChannelSplat != null)
                             {
+                                var liquid = Mode.Blood!.NearestLiquidTo(ChannelSplat.Pos, 1.2f);
+                                if (liquid != null) Mode.Blood.RemoveLiquid(liquid);
                                 StainMopped?.Invoke(ChannelSplat);
                                 ChannelSplat = null;
                             }
@@ -349,11 +351,17 @@ public partial class PlayerController : CharacterBody3D
 
     private void HandleInteractPress()
     {
-        // 0. throw a held prop
-        if (HeldProp != null)
+        // 0. throw a held prop (the extinguisher is a tool, not a projectile)
+        if (HeldProp != null && HeldProp.ItemType != "extinguisher")
         {
             if (ChannelT >= 0) return;
             ThrowProp();
+            return;
+        }
+        if (HeldProp is { ItemType: "extinguisher" })
+        {
+            if (_sprayUses > 0 && ChannelT < 0) SprayExtinguisher();
+            else if (_sprayUses <= 0) Mode.Toast("Empty. It's a decorative cylinder now.", ToastKind.Info);
             return;
         }
         // 1. carrying a body near a hide spot -> hide it
@@ -446,6 +454,10 @@ public partial class PlayerController : CharacterBody3D
                 case "firealarm":
                     Mode.PullFireAlarm();
                     return;
+                case "phone":
+                    var ph = NearestPhone();
+                    if (ph.HasValue) Mode.PhoneLure(ph.Value);
+                    return;
                 case "locker":
                     Mode.CycleUniform();
                     return;
@@ -463,6 +475,7 @@ public partial class PlayerController : CharacterBody3D
             if (prop != null)
             {
                 HeldProp = prop;
+                if (prop.ItemType == "extinguisher") _sprayUses = 3;
                 prop.Freeze = true;
                 prop.GetParent().RemoveChild(prop);
                 _camera.AddChild(prop);
@@ -525,6 +538,30 @@ public partial class PlayerController : CharacterBody3D
         Mode.Toast($"The {prop.ItemType} becomes someone else's problem.", ToastKind.Info);
     }
 
+    private int _sprayUses;
+
+    private void SprayExtinguisher()
+    {
+        _sprayUses--;
+        Mode.Synth?.Bonk();
+        var fwd = ForwardFlat();
+        var cloudPos = FeetPos + fwd * 2.2f;
+        Mode.Blood!.SpawnLiquid(cloudPos, "water");
+        int blinded = 0;
+        foreach (var n in Mode.Npcs)
+        {
+            if (!n.Awake) continue;
+            var toN = n.Pos - FeetPos;
+            if (toN.Length() > 4.5f) continue;
+            if (fwd.Dot(new Vector3(toN.X, 0f, toN.Z).Normalized()) < 0.6f) continue;
+            n.BlindedUntil = AiDirector.Now + 3f;
+            blinded++;
+        }
+        Mode.Toast(blinded > 0
+            ? $"PSHHHH. {blinded} coworker{(blinded > 1 ? "s" : "")} blinded by workplace safety equipment."
+            : "PSHHHH. A beautiful white cloud. Nobody to blind. Tragic.", ToastKind.Chaos);
+    }
+
     private PropItem? NearestProp()
     {
         PropItem? best = null;
@@ -538,6 +575,19 @@ public partial class PlayerController : CharacterBody3D
                 best = item;
                 bestDist = d;
             }
+        }
+        return best;
+    }
+
+    private Vector3? NearestPhone()
+    {
+        Vector3? best = null;
+        float bestDist = 1.6f;
+        foreach (var ph in WorldData.Phones)
+        {
+            var p = new Vector3(ph.X, 0f, ph.Z);
+            float d = p.DistanceTo(FeetPos);
+            if (d < bestDist) { best = p; bestDist = d; }
         }
         return best;
     }
@@ -622,7 +672,9 @@ public partial class PlayerController : CharacterBody3D
         if (use != null)
             return use.Prompt;
         if (HeldProp != null)
-            return $"E — Throw {HeldProp.ItemType}";
+            return HeldProp.ItemType == "extinguisher"
+                ? $"E — Spray ({_sprayUses} charges left)"
+                : $"E — Throw {HeldProp.ItemType}";
         var prop = NearestProp();
         if (prop != null)
             return $"E — Grab {prop.ItemType}";
@@ -674,5 +726,6 @@ public partial class PlayerController : CharacterBody3D
         return sus;
     }
 }
+
 
 

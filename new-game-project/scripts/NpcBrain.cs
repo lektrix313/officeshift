@@ -60,6 +60,8 @@ public partial class NpcBrain : Node
     public Vector3 HomePos { get; set; }
     public float BathroomTimer { get; set; }
     public bool StinkReacted { get; set; }
+    public float BlindedUntil { get; set; }
+    public float SlipCooldownUntil { get; set; }
 
     public bool Awake => State != NpcState.Out && State != NpcState.Hidden;
     public Vector3 Pos => Body.Position;
@@ -247,6 +249,9 @@ public partial class NpcBrain : Node
 
 public static class AiDirector
 {
+    /// <summary>Director clock (seconds), used for blinded/slip cooldowns.</summary>
+    public static float Now;
+
     /// <summary>Read by GameMode after Tick().</summary>
     public static class Outputs
     {
@@ -257,6 +262,7 @@ public static class AiDirector
     /// <summary>Port of game.ts updateNpcs().</summary>
     public static void Tick(List<NpcBrain> npcs, AiContext ctx, double dt)
     {
+        Now += (float)dt;
         float maxSus = 0f;
         bool watched = false;
 
@@ -445,7 +451,7 @@ public static class AiDirector
             }
 
             // --- perception ---
-            if (n.State != NpcState.Seated && !n.Talking && !ctx.Evacuating)
+            if (n.State != NpcState.Seated && !n.Talking && !ctx.Evacuating && n.BlindedUntil <= Now)
             {
                 bool seesPlayer = ctx.CanSee?.Invoke(n, ctx.PlayerPos, 1f) ?? false;
                 float playerDist = n.Pos.DistanceTo(ctx.PlayerPos);
@@ -558,6 +564,24 @@ public static class AiDirector
 
             maxSus = System.MathF.Max(maxSus, n.Suspicion);
             PushVisual(n, dt);
+
+            // --- consequence engine: liquid slips (the floor is lava-adjacent) ---
+            if (n.Awake && n.State is NpcState.Routine or NpcState.Curious && n.SlipCooldownUntil <= Now)
+            {
+                var liquid = ctx.Blood.NearestLiquidTo(n.Pos, 0.7f);
+                if (liquid != null && (n.Moving || n.State == NpcState.Curious))
+                {
+                    n.SlipCooldownUntil = Now + 20f;
+                    if (GD.RandRange(0.0, 1.0) < 0.85)
+                    {
+                        var slipDir = new Vector3((float)GD.RandRange(-1, 1), 0f, (float)GD.RandRange(-1, 1)).Normalized();
+                        ctx.Toast?.Invoke($"{n.NpcName} slips in the spill. The sound was... wet.", ToastKind.Chaos);
+                        ctx.AlarmSfx?.Invoke();
+                        n.KnockOut(slipDir);
+                        ctx.Blood.SpawnLiquid(n.Pos, "coffee");
+                    }
+                }
+            }
         }
 
         Outputs.MaxSus = maxSus;
@@ -684,6 +708,7 @@ public static class AiDirector
 
     private static Vector3[] GuardPostsOf(AiContext ctx) => WorldData.GuardPosts;
 }
+
 
 
 

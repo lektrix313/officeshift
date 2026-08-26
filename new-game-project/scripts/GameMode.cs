@@ -34,6 +34,7 @@ public partial class GameMode : Node3D
     public bool VendingLaxativeTaken;
     public bool VendingEnergyTaken;
     public float VendingCooldown;
+    public float PhoneCooldown;
     public float AlarmCooldown;
     public float StinkTimer;
     public float EvacTimer;
@@ -208,6 +209,7 @@ public partial class GameMode : Node3D
 
         _shiftElapsed += dt;
         VendingCooldown = System.MathF.Max(0f, VendingCooldown - dt);
+        PhoneCooldown = System.MathF.Max(0f, PhoneCooldown - dt);
         AlarmCooldown = System.MathF.Max(0f, AlarmCooldown - dt);
         if (StinkTimer > 0)
         {
@@ -540,6 +542,31 @@ public partial class GameMode : Node3D
         Synth?.Alarm();
     }
 
+    /// <summary>Prop-induced knockout (chair to the back): KO + witnesses, no blood.</summary>
+    public void OnPropKnockout(NpcBrain victim, Vector3 flopDir, string itemType)
+    {
+        if (victim.State == NpcState.Out || Player == null) return;
+        bool wasAsleep = victim.State == NpcState.Seated;
+        FlashCrime();
+        victim.KnockOut(flopDir);
+        Stats.Bonks++;
+        Synth?.Bonk();
+        Toast(wasAsleep
+            ? $"{victim.NpcName} was already asleep. The {itemType} made it official."
+            : $"{victim.NpcName} eats a {itemType} to the back. Down. Very down.", ToastKind.Chaos);
+
+        foreach (var w in Npcs)
+        {
+            if (w == victim || !w.Awake) continue;
+            float dist = w.Pos.DistanceTo(victim.Pos);
+            bool seen = CanSee(w, victim.Pos) || dist < Bal.WitnessAutoSeeDist;
+            if (!seen) continue;
+            w.AddSuspicion(Bal.WitnessSus);
+            Toast($"{w.NpcName} saw you {itemType}-tackle {victim.NpcName}. HR-adjacent behavior.", ToastKind.Warn);
+            if (Player.DisguiseOf != null) Player.BlowDisguise();
+        }
+    }
+
     /// <summary>Impact noise from thrown/dropped props: nearby NPCs come poke at it.</summary>
     public void OnNoise(Vector3 pos, float radius, string itemType, bool shattered)
     {
@@ -600,6 +627,27 @@ public partial class GameMode : Node3D
             "Sales" => "Sales lanyard on. Nobody knows what Sales does — including Sales.",
             _ => "Uniform off. You are a nameless new hire again.",
         }, ToastKind.Success);
+    }
+
+    public void PhoneLure(Vector3 phonePos)
+    {
+        if (PhoneCooldown > 0 || Player == null) return;
+        PhoneCooldown = 30f;
+        NpcBrain? best = null;
+        float d1 = float.MaxValue;
+        foreach (var n in Npcs)
+        {
+            if (!n.Awake || n.Talking || n == Guard) continue;
+            float d = n.Pos.DistanceTo(Player.FeetPos);
+            if (d < d1) { d1 = d; best = n; }
+        }
+        if (best == null) { Toast("You call every extension. Nobody picks up. The office is haunted.", ToastKind.Info); return; }
+        Synth?.Pickup();
+        ApplyDirective(best, "coffeepoint", 0f); // clear any stale directive
+        best.DirectiveZone = null;
+        best.DirectiveTarget = phonePos;
+        best.DirectiveTimer = 25f;
+        Toast($"{best.NpcName} answers the desk phone: \"Yes, this is {best.NpcName}.\" They're heading over.", ToastKind.Info);
     }
 
     public void SpikeCoffee()

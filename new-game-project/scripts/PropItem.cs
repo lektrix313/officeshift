@@ -1,4 +1,4 @@
-using Godot;
+﻿using Godot;
 
 /// <summary>
 /// Grabbable/throwable desk prop (port of the bible's item-catalog spirit:
@@ -61,6 +61,26 @@ public partial class PropItem : RigidBody3D
                     MaterialOverride = MakeMat(type),
                 });
                 break;
+            case "chair":
+                item.Mass = 3f;
+                item.NoiseRadius = 9f;
+                item.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(0.45f, 0.9f, 0.45f) } });
+                item.AddChild(new MeshInstance3D
+                {
+                    Mesh = new BoxMesh { Size = new Vector3(0.45f, 0.9f, 0.45f) },
+                    MaterialOverride = MakeMat(type),
+                });
+                break;
+            case "extinguisher":
+                item.Mass = 2f;
+                item.NoiseRadius = 6f;
+                item.AddChild(new CollisionShape3D { Shape = new CapsuleShape3D { Radius = 0.09f, Height = 0.5f } });
+                item.AddChild(new MeshInstance3D
+                {
+                    Mesh = new CylinderMesh { TopRadius = 0.09f, BottomRadius = 0.09f, Height = 0.5f },
+                    MaterialOverride = new StandardMaterial3D { AlbedoColor = Color.FromHtml("c23a2b"), Metallic = 0.4f, Roughness = 0.4f },
+                });
+                break;
             default: // papers
                 item.Mass = 0.5f;
                 item.NoiseRadius = 2.5f;
@@ -96,14 +116,14 @@ public partial class PropItem : RigidBody3D
     {
         if (!_armed) return;
         float speed = LinearVelocity.Length();
-        if (speed < 1.8f) return;
+        if (speed < 1.5f) return;
 
         // debounce: settling/bumps shouldn't machine-gun the office
         ulong now = Time.GetTicksMsec();
         if (now - _lastNoiseMsec < 3000) return;
         _lastNoiseMsec = now;
 
-        float radius = NoiseRadius * (Breakable && speed > 4.5f ? 1.4f : 1f);
+        float radius = NoiseRadius * (Breakable && speed > 3.5f ? 1.4f : 1f);
         GameMode.Instance?.OnNoise(GlobalPosition, radius, ItemType, Breakable && speed > 4.5f);
 
         // smacking an NPC with office supplies is its own reward
@@ -114,18 +134,31 @@ public partial class PropItem : RigidBody3D
                 if (!n.Awake) continue;
                 if (n.Pos.DistanceTo(GlobalPosition) < 0.9f)
                 {
-                    n.AddSuspicion(25);
-                    GameMode.Instance.Toast($"You hit {n.NpcName} with a {ItemType}. They will remember this.", ToastKind.Chaos);
+                    if (ItemType == "chair")
+                    {
+                        // comedy violence tier: a chair to the back is a full takedown
+                        var dir = (n.Pos - GlobalPosition); dir.Y = 0f;
+                        GameMode.Instance.OnPropKnockout(n, dir.Normalized(), ItemType);
+                    }
+                    else
+                    {
+                        n.AddSuspicion(25);
+                        GameMode.Instance.Toast($"You hit {n.NpcName} with a {ItemType}. They will remember this.", ToastKind.Chaos);
+                    }
                     break;
                 }
             }
         }
 
-        if (Breakable && speed > 4.5f)
+        if (Breakable)
         {
-            // shatter: the mug is gone, the evidence remains in everyone's memory
+            // the mug is gone; the coffee puddle remains as a slip hazard
+            if (ItemType == "mug")
+                GameMode.Instance?.Blood?.SpawnLiquid(GlobalPosition, "coffee");
             _armed = false;
             QueueFree();
         }
     }
 }
+
+
