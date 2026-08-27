@@ -123,7 +123,7 @@ public sealed class NpcStimulus
 
 public enum ToastKind { Info, Warn, Chaos, Success }
 
-public enum ChannelMode { None, Terminal, Mop, Coffee, Microwave, Tape, Photo }
+public enum ChannelMode { None, Terminal, Mop, Coffee, Microwave, Tape, Photo, FloorTransition }
 
 public enum RoomId { Server, Printer, Break, Closet, Reception, MeetingA, MeetingB, Hr, Floor }
 

@@ -18,6 +18,13 @@ public partial class PlayerController : CharacterBody3D
     public bool BlueprintSent { get; set; }
     public string? DisguiseOf { get; set; }
     public string? DepartmentDisguise { get; set; }
+
+    // ---- multi-floor state ----
+    public string FloorId { get; set; } = "floor-1";
+    public bool IsChangingFloor { get; private set; }
+    public float FloorTransitionTimer { get; private set; }
+    public string? TargetFloorId { get; private set; }
+    public Vector3 TransitionExitPosition { get; private set; }
     public NpcBrain? Carrying { get; set; }
     public PropItem? HeldProp { get; set; }
     public HeldItem HeldItem { get; set; }
@@ -45,6 +52,7 @@ public partial class PlayerController : CharacterBody3D
         ChannelMode.Microwave => 3f,
         ChannelMode.Tape => 4f,
         ChannelMode.Photo => 3f,
+        ChannelMode.FloorTransition => 2.5f,
         _ => 1f,
     };
 
@@ -106,6 +114,7 @@ public partial class PlayerController : CharacterBody3D
     {
         if (!Mode.Started || Mode.Over) return;
         float dt = (float)delta;
+        TickFloorTransition(dt);
 
         BonkTimer = System.MathF.Max(0f, BonkTimer - dt);
         _photoCooldown = System.MathF.Max(0f, _photoCooldown - dt);
@@ -314,6 +323,7 @@ public partial class PlayerController : CharacterBody3D
                     ChannelMode.Terminal => $"Stealing blueprints… {System.Math.Min(100, (int)(ChannelT / duration * 100))}%",
                     ChannelMode.Mop => $"Mopping up evidence… {System.Math.Min(100, (int)(ChannelT / duration * 100))}%",
                     ChannelMode.Coffee => $"Brewing a fresh pot… {System.Math.Min(100, (int)(ChannelT / duration * 100))}%",
+                    ChannelMode.FloorTransition => $"Riding {TargetFloorId}… {System.Math.Min(100, (int)(ChannelT / duration * 100))}%",
                     _ => $"Heating up fish… {System.Math.Min(100, (int)(ChannelT / duration * 100))}%",
                 };
                 if (ChannelT >= duration)
@@ -321,6 +331,9 @@ public partial class PlayerController : CharacterBody3D
                     ChannelT = -1;
                     switch (ChannelMode)
                     {
+                        case ChannelMode.FloorTransition:
+                            CompleteFloorTransition();
+                            break;
                         case ChannelMode.Terminal:
                             Mode.SetOfficeObjectState("serverterminal", OfficeObjectState.InUse, true);
                             HasBlueprint = true;
@@ -429,6 +442,25 @@ public partial class PlayerController : CharacterBody3D
             ChannelMode = ChannelMode.Terminal;
             ChannelT = 0;
             Mode.Toast("Downloading blueprints… hold E. Try to look busy.", ToastKind.Info);
+            return;
+        }
+        // 3.5 elevator / stair transition
+        var floorLink = FindNearestFloorLink();
+        if (floorLink != null)
+        {
+            if (!Mode.Navigation.CanTraverse(FloorId, floorLink.ToFloor, PlayerKeycardId()))
+            {
+                Mode.Toast($"Access denied. You need a keycard for {floorLink.ToFloor}.", ToastKind.Warn);
+                Mode.ApplyPlayerAction(ConsequenceActions.RestrictedAccess, 0.6f, 1f);
+                Mode.PublishStimulus(NpcStimulusKind.AccessDenied, FeetPos, ObjectBalance.AccessDeniedActivation, true,
+                    $"Player denied access to {floorLink.ToFloor}.", radius: ObjectBalance.AccessDeniedRadius);
+                return;
+            }
+            TargetFloorId = floorLink.ToFloor;
+            TransitionExitPosition = floorLink.ToPosition;
+            ChannelMode = ChannelMode.FloorTransition;
+            ChannelT = 0;
+            Mode.Toast($"Entering {floorLink.Type} to {FriendlyFloorName(floorLink.ToFloor)}… hold E.", ToastKind.Info);
             return;
         }
         // 4. mop blood (requires mop)
@@ -576,6 +608,56 @@ public partial class PlayerController : CharacterBody3D
             PhotocopyFace();
             return;
         }
+    }
+
+    // ================= multi-floor =================
+
+    private void TickFloorTransition(float dt)
+    {
+        if (!IsChangingFloor) return;
+        FloorTransitionTimer -= dt;
+        if (FloorTransitionTimer <= 0f)
+            CompleteFloorTransition();
+    }
+
+    private void CompleteFloorTransition()
+    {
+        if (!IsChangingFloor || string.IsNullOrEmpty(TargetFloorId)) return;
+        FloorId = TargetFloorId;
+        GlobalPosition = new Vector3(TransitionExitPosition.X, GlobalPosition.Y, TransitionExitPosition.Z);
+        TargetFloorId = null;
+        IsChangingFloor = false;
+        FloorTransitionTimer = 0f;
+        Mode.Toast($"You arrive on {FriendlyFloorName(FloorId)}. Act like you belong.", ToastKind.Info);
+    }
+
+    private FloorLink? FindNearestFloorLink()
+    {
+        FloorLink? best = null;
+        float bestDist = Bal.InteractRange + 0.5f;
+        foreach (var link in Mode.Navigation.Links)
+        {
+            if (!link.FromFloor.Equals(FloorId, System.StringComparison.OrdinalIgnoreCase)) continue;
+            float d = link.FromPosition.DistanceTo(FeetPos);
+            if (d < bestDist)
+            {
+                best = link;
+                bestDist = d;
+            }
+        }
+        return best;
+    }
+
+    /// <summary>Player keycard ID. Currently returns null; wired when keycards are implemented.</summary>
+    private string? PlayerKeycardId() => null;
+
+    private static string FriendlyFloorName(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return "Floor 1";
+        if (id.Equals("floor-1", System.StringComparison.OrdinalIgnoreCase)) return "Floor 1";
+        if (id.Equals("floor-2", System.StringComparison.OrdinalIgnoreCase)) return "Floor 2";
+        if (id.Equals("floor-3", System.StringComparison.OrdinalIgnoreCase)) return "Floor 3";
+        return id;
     }
 
     private void ThrowProp()
@@ -754,6 +836,14 @@ public partial class PlayerController : CharacterBody3D
         var closet = FindSpot("closet");
         if (!HasMop && closet != null && FeetPos.DistanceTo(closet.Pos) < Bal.InteractRange + 0.5f)
             return "E — Grab the mop";
+        var fl = FindNearestFloorLink();
+        if (fl != null)
+        {
+            bool canGo = Mode.Navigation.CanTraverse(FloorId, fl.ToFloor, PlayerKeycardId());
+            return canGo
+                ? $"E — {fl.Type} to {FriendlyFloorName(fl.ToFloor)}"
+                : $"🔒 Need keycard for {FriendlyFloorName(fl.ToFloor)}";
+        }
         var printer = FindSpot("printer");
         if (printer != null && FeetPos.DistanceTo(printer.Pos) < Bal.InteractRange + 0.5f)
             return _photoCooldown > 0 ? $"Printer is cooling down… ({System.MathF.Ceiling(_photoCooldown)}s)" : "E — Photocopy your face. 50 copies.";

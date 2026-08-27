@@ -162,6 +162,20 @@ public partial class GameMode : Node3D
             BindWorkshopAccess(workshop);
             Toast($"WORKSHOP LOADED: {workshop.Business} · {workshop.Waypoints.Count} authored waypoints", ToastKind.Success);
         }
+        else
+        {
+            // default multi-floor starter: two connected floors for testing
+            Navigation.AddFloor("floor-1");
+            Navigation.AddFloor("floor-2");
+            var elevatorPos = new Vector3(0f, 0f, 20.8f);
+            var elevatorTop = new Vector3(0f, 3f, 20.8f);
+            Navigation.AddLink(new FloorLink("elevator-main-up", "floor-1", "floor-2", elevatorPos, elevatorTop, OfficeObjectType.Elevator));
+            Navigation.AddLink(new FloorLink("elevator-main-down", "floor-2", "floor-1", elevatorTop, elevatorPos, OfficeObjectType.Elevator));
+            var stairPos = new Vector3(-12f, 0f, 20.8f);
+            var stairTop = new Vector3(-12f, 3f, 20.8f);
+            Navigation.AddLink(new FloorLink("stair-main-up", "floor-1", "floor-2", stairPos, stairTop, OfficeObjectType.Stairwell));
+            Navigation.AddLink(new FloorLink("stair-main-down", "floor-2", "floor-1", stairTop, stairPos, OfficeObjectType.Stairwell));
+        }
         Blood = new BloodSystem { Name = "Blood" };
         AddChild(Blood);
         Synth = new BlipSynth { Name = "Synth" };
@@ -1624,6 +1638,7 @@ public partial class GameMode : Node3D
             Dept = Player?.DepartmentDisguise,
             CaseActive = CaseActive,
             CasePct = CaseEvidence,
+            Floor = Player?.FloorId ?? "floor-1",
         };
         bool channeling = Player != null && Player.ChannelProgressFraction >= 0;
         foreach (var o in Active.Objectives)

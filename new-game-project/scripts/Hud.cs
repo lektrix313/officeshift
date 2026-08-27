@@ -27,6 +27,7 @@ public sealed class HudSnapshot
     public string? Dept;
     public bool CaseActive;
     public float CasePct;
+    public string Floor = "floor-1";
     public List<(string Label, bool Done)> Objectives { get; } = new();
     public (int Bonks, int Hides, int Reports, int Disguises, int Cleans) Stats;
 }
@@ -47,6 +48,7 @@ public partial class Hud : CanvasLayer
     private static readonly Color Red = Color.FromHtml("ff3b30");
 
     private Label _clockLabel = null!;
+    private Label _floorLabel = null!;
     private Label _susGlyph = null!;
     private ProgressBar _susBar = null!;
     private Label _susPct = null!;
@@ -79,6 +81,11 @@ public partial class Hud : CanvasLayer
         _clockLabel = MakeLabel(root, "06:00", 32, AccentGold);
         Anchor(_clockLabel, Control.LayoutPreset.CenterTop);
         _clockLabel.OffsetTop = 10;
+
+        // floor indicator below clock
+        _floorLabel = MakeLabel(root, "", 14, AccentCyan);
+        Anchor(_floorLabel, Control.LayoutPreset.CenterTop);
+        _floorLabel.OffsetTop = 46;
 
         // suspicion meter top-left
         var susPanel = Panel(root, new Vector2(16, 10), new Vector2(280, 58));
@@ -170,6 +177,12 @@ public partial class Hud : CanvasLayer
         int secs = (int)s.TimeLeft % 60;
         _clockLabel.Text = $"{mins:00}:{secs:00}";
         _clockLabel.Modulate = s.TimeLeft < 60f ? Red : AccentGold;
+
+        string floorDisplay = string.IsNullOrWhiteSpace(s.Floor) || s.Floor == "floor-1"
+            ? "Floor 1"
+            : s.Floor;
+        _floorLabel.Text = $"▲ {floorDisplay}";
+        _floorLabel.Visible = s.Started && !s.Over;
 
         float t = Util.Clamp(s.MaxSuspicion / 100f, 0f, 1f);
         _susBar.Value = t;

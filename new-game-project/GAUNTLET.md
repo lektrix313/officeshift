@@ -402,3 +402,17 @@ fun-per-line-of-code. This file is the loop's persistent state.
 - [x] Global events remain explicit: the fire alarm uses its floor-wide radius rather than a hidden broadcast bypass
 - [x] Repeated writes to the same object state no longer emit duplicate consequence stimuli
 - [x] OFFICE_OBJECT_CATALOG.md documents the radius rule and active-use exception
+
+### CYCLE 31 — player elevator/stair transition (IMPLEMENTED)
+- [x] Added `FloorId`, `IsChangingFloor`, `FloorTransitionTimer`, `TargetFloorId`, and `TransitionExitPosition` to `PlayerController`
+- [x] Added `FloorTransition` variant to `ChannelMode` enum with 2.5s channel duration
+- [x] Player detects nearest floor link by proximity (`FindNearestFloorLink`)
+- [x] Access check uses `Navigation.CanTraverse()` with keycard validation
+- [x] Denied access publishes `AccessDenied` stimulus to nearby NPCs and applies player consequence
+- [x] Successful transition starts channel bar, then teleports player to destination position and swaps floor ID
+- [x] Floor label added to HUD below the clock, shows current floor name
+- [x] Default two-floor starter layout with elevator + stair links added when no workshop file is present
+- [x] Prompt shows floor link proximity and keycard-lock status (`E — Elevator to Floor 2` / `🔒 Need keycard for Floor 2`)
+- [x] C# build: 0 errors, 0 warnings
+- [x] Frontend build: passed
+- [ ] Godot runtime capture remains pending until the local Mono assembly startup blocker is resolved
