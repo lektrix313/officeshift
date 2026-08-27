@@ -21,6 +21,7 @@ public sealed class AiContext
     public required BloodSystem Blood;
     public double AlertTimer;
     public bool Evacuating;
+    public BossDifficulty BossDifficulty = BossDifficulty.Standard;
     public Vector3 EvacPoint;
     public Vector3 BathroomPoint;
     public Vector3 CoffeePoint;
@@ -31,6 +32,7 @@ public sealed class AiContext
     public Vector3 NoisePos;
     public required List<NpcStimulus> Stimuli;
     public float WorkdayElapsed;
+    public SocialSimulation? Social;
 
     public Action<string, ToastKind>? Toast;
     public Action? AlarmSfx;
@@ -48,7 +50,43 @@ public partial class NpcBrain : Node
     public ArchetypeSpec Spec { get; private set; } = Specs.Table[Archetype.Drone];
     public PersonalityProfile Personality { get; private set; } = Personas.ProfileFor("unknown");
     public NpcStatSheet Stats { get; private set; } = new(Personas.ProfileFor("unknown"));
+    public NpcAttitude Attitude { get; } = new();
     public string Zone { get; set; } = "drone";
+    public string FloorId { get; private set; } = "floor-1";
+    public bool IsChangingFloor { get; private set; }
+    public float FloorTransitionTimer { get; private set; }
+    public string? TargetFloorId { get; private set; }
+
+    public void SetFloor(string floorId) => FloorId = string.IsNullOrWhiteSpace(floorId) ? "floor-1" : floorId;
+    public void BeginFloorTransition(string targetFloor, float seconds = 2.5f)
+    {
+        TargetFloorId = targetFloor;
+        IsChangingFloor = true;
+        FloorTransitionTimer = seconds;
+        Moving = false;
+    }
+    public bool FinishFloorTransition()
+    {
+        if (!IsChangingFloor || string.IsNullOrEmpty(TargetFloorId)) return false;
+        FloorId = TargetFloorId;
+        TargetFloorId = null;
+        IsChangingFloor = false;
+        FloorTransitionTimer = 0f;
+        return true;
+    }
+    public void TickFloorTransition(float dt)
+    {
+        if (!IsChangingFloor) return;
+        FloorTransitionTimer = MathF.Max(0f, FloorTransitionTimer - dt);
+        if (FloorTransitionTimer <= 0f) FinishFloorTransition();
+    }
+    public WorkerProfile WorkProfile { get; private set; } = WorkerProfiles.For("unknown");
+    public StaffGameplayProfile StaffProfile { get; private set; } = CanonicalStaff.For("unknown");
+    public string Job => StaffProfile.Job;
+    public string Department => StaffProfile.Department;
+    public WorkdayMovementStyle MovementStyle => StaffProfile.Movement;
+    public StaffObservationChannel PrimaryObservation => StaffProfile.PrimaryChannel;
+    public StaffObservationChannel SecondaryObservation => StaffProfile.SecondaryChannel;
 
     public NpcState State { get; set; } = NpcState.Routine;
     public WorkdayState WorkState { get; internal set; } = WorkdayState.Arriving;
@@ -74,6 +112,35 @@ public partial class NpcBrain : Node
     public bool Quit { get; set; }
     public float BlindedUntil { get; set; }
     public float SlipCooldownUntil { get; set; }
+    public NpcNeeds Needs { get; } = new();
+    public NpcActionChoice? LastAutonomousChoice { get; private set; }
+    public float AutonomousActionTimer { get; private set; }
+
+    public void ApplyAutonomousChoice(NpcActionChoice choice, Vector3 destination)
+    {
+        LastAutonomousChoice = choice;
+        AutonomousActionTimer = choice.DurationSeconds;
+        WorkdayTarget = destination;
+        MoveTarget = destination;
+        if (choice.Action == NpcAutonomousAction.Work)
+            WorkState = WorkdayState.WorkingAtDesk;
+        else if (choice.Action == NpcAutonomousAction.Coffee)
+            WorkState = WorkdayState.CoffeeBreak;
+        else if (choice.Action == NpcAutonomousAction.Snack)
+            WorkState = WorkdayState.StationaryUse;
+        else if (choice.Action == NpcAutonomousAction.Toilet)
+            WorkState = WorkdayState.Toilet;
+        else if (choice.Action == NpcAutonomousAction.Print)
+            WorkState = WorkdayState.WalkingToPrinter;
+        else if (choice.Action == NpcAutonomousAction.Gossip)
+            WorkState = WorkdayState.WaterCooler;
+        Body.SetWorkdayState(WorkState);
+    }
+
+    public void TickAutonomousAction(float dt)
+    {
+        AutonomousActionTimer = MathF.Max(0f, AutonomousActionTimer - dt);
+    }
 
     // Consequence reaction telemetry/state. Cooldowns are per stimulus kind so a noisy
     // printer cannot suppress a separate body, alarm, or player-crime reaction.
@@ -99,6 +166,26 @@ public partial class NpcBrain : Node
     public Vector3? ReportTarget;
     public Vector3 LastSeenPlayer;
     public float LostSightTimer;
+    public Vector3? LastSeenAreaHint { get; private set; }
+    public float LastSeenAreaHintConfidence { get; private set; }
+    public float LastSeenAreaHintTimer { get; private set; }
+    public float BossDeskTimer { get; set; }
+
+    public void ClearAreaHint() => LastSeenAreaHint = null;
+
+    public void RememberAreaHint(Vector3 position, float confidence, float duration)
+    {
+        LastSeenAreaHint = position;
+        LastSeenAreaHintConfidence = Util.Clamp(confidence, 0f, 1f);
+        LastSeenAreaHintTimer = duration;
+    }
+
+    public void TickAreaHint(float dt)
+    {
+        LastSeenAreaHintTimer = System.MathF.Max(0f, LastSeenAreaHintTimer - dt);
+        if (LastSeenAreaHintTimer <= 0f) LastSeenAreaHint = null;
+    }
+
     public Vector3? MoveTarget;
     public float PauseTimer;
     public bool Moving;
@@ -112,6 +199,9 @@ public partial class NpcBrain : Node
         brain.Personality = Personas.ProfileFor(body.DisplayName);
         brain.Stats = new NpcStatSheet(brain.Personality);
         brain.Zone = zone;
+        brain.FloorId = "floor-1";
+        brain.WorkProfile = CanonicalWorkdayProfiles.For(body.DisplayName);
+        brain.StaffProfile = CanonicalStaff.For(body.DisplayName);
         brain.HomePos = body.Position;
         brain.Name = $"Brain_{body.DisplayName}";
         return brain;
@@ -144,11 +234,12 @@ public partial class NpcBrain : Node
         float departmentMultiplier = string.IsNullOrEmpty(stimulus.ObjectDepartment)
             ? NpcStatBalance.NeutralDepartmentMultiplier
             : Stats.DepartmentMultiplier(stimulus.ObjectDepartment);
+        float specialtyMultiplier = SpecialtyMultiplier(stimulus);
         float activation = stimulus.Intensity *
             (NpcStatBalance.ActivationBase + proximity * NpcStatBalance.ProximityWeight) *
             Stats.ActivationSensitivity *
             (NpcStatBalance.AttentionBase + attention * NpcStatBalance.AttentionWeight) *
-            departmentMultiplier;
+            departmentMultiplier * specialtyMultiplier;
         if (stimulus.PlayerLed) activation *= NpcStatBalance.PlayerLedActivationMultiplier;
         ReactionActivation = Util.Clamp(activation, 0f, NpcStatBalance.ActivationCap);
         Stats.ApplyObjectEffect(stimulus.StressDelta, stimulus.ComfortDelta, ReactionActivation);
@@ -176,7 +267,49 @@ public partial class NpcBrain : Node
         ActiveStimulus = stimulus.Kind;
         ReactionAction = ChooseReaction(stimulus);
         ReactionText = ReactionLabel(ReactionAction);
+        var attitude = stimulus.Kind switch
+        {
+            NpcStimulusKind.BodyFound or NpcStimulusKind.BloodFound or NpcStimulusKind.PlayerCrime =>
+                AttitudeRules.For(ConsequenceActions.MajorCrime, stimulus.PlayerLed, ReactionAction == NpcReactionAction.Panic),
+            NpcStimulusKind.ComfortEvent => NpcAttitudeKind.Grateful,
+            NpcStimulusKind.Rumor => NpcAttitudeKind.Curious,
+            NpcStimulusKind.AccessDenied or NpcStimulusKind.ObjectFailure => NpcAttitudeKind.Annoyed,
+            _ => NpcAttitudeKind.Curious,
+        };
+        SetAttitude(attitude, Util.Clamp(ReactionActivation / NpcStatBalance.ActivationCap, 0.15f, 1f),
+            stimulus.Kind == NpcStimulusKind.ComfortEvent ? 120f : ConsequenceBalance.DefaultAttitudeSeconds,
+            stimulus.Description);
         return true;
+    }
+
+    private float SpecialtyMultiplier(NpcStimulus stimulus)
+    {
+        bool matches(StaffObservationChannel channel) => stimulus.Kind switch
+        {
+            NpcStimulusKind.AccessDenied => channel is StaffObservationChannel.IdentityAndVisitors or StaffObservationChannel.CalendarsAndAccess,
+            NpcStimulusKind.PlayerCrime => channel is StaffObservationChannel.Numbers or StaffObservationChannel.Finance or StaffObservationChannel.VisualEvidence or StaffObservationChannel.Inventory or StaffObservationChannel.InconsistentStories,
+            NpcStimulusKind.ObjectFailure or NpcStimulusKind.ITCalled => channel is StaffObservationChannel.Technology or StaffObservationChannel.NetworkPatterns or StaffObservationChannel.MaintenanceAndBackRoutes,
+            NpcStimulusKind.MeetingPressure => channel is StaffObservationChannel.MeetingsAndTime or StaffObservationChannel.CalendarsAndAccess,
+            NpcStimulusKind.Rumor => channel is StaffObservationChannel.GossipDrive or StaffObservationChannel.HumanResources or StaffObservationChannel.InstitutionalMemory,
+            NpcStimulusKind.BodyFound or NpcStimulusKind.BloodFound => channel is StaffObservationChannel.PanicAndRumor or StaffObservationChannel.HumanResources or StaffObservationChannel.MaintenanceAndBackRoutes,
+            _ => false,
+        };
+        return matches(PrimaryObservation) ? 1.3f : matches(SecondaryObservation) ? 1.15f : 1f;
+    }
+
+    public void SetAttitude(NpcAttitudeKind kind, float strength, float duration, string source)
+    {
+        Attitude.Set(kind, strength, duration * Personality.PanicDurationMultiplier, source);
+    }
+
+    public void RecoverAttitude(float multiplier = 1f) => Attitude.Recover(multiplier);
+
+    public void TickAttitude(float dt)
+    {
+        float recovery = WorkdayAttentionMultiplier > 0.8f
+            ? ConsequenceBalance.AttitudeDecayPerSecond
+            : ConsequenceBalance.AttitudeDecayPerSecond * 1.25f;
+        Attitude.Tick(dt, recovery);
     }
 
     public void TickReactionCooldowns(float dt)
@@ -273,8 +406,9 @@ public partial class NpcBrain : Node
             Body.ShowSleeping(false);
         }
         float clock = (shiftElapsed + WorkdayOffset) % Bal.ShiftSeconds;
-        int slot = System.Math.Min(WorkdaySchedule.Length - 1, (int)(clock / WorkdaySlotSeconds));
-        var next = WorkdaySchedule[slot];
+        float hour = WorkdayBalance.WorkdayStartHour + clock / (Bal.ShiftSeconds / (WorkdayBalance.WorkdayEndHour - WorkdayBalance.WorkdayStartHour));
+        var authoredBeat = WorkProfile.Beats.FirstOrDefault(beat => hour >= beat.StartHour && hour < beat.EndHour);
+        var next = authoredBeat?.State ?? DefaultWorkdayState(clock);
         if (next != WorkState)
         {
             WorkState = next;
@@ -283,7 +417,36 @@ public partial class NpcBrain : Node
             PauseTimer = 0f;
             Body.SetWorkdayState(next);
         }
-        WorkdayTarget = WorkdayPoint(ctx);
+        WorkdayTarget = authoredBeat != null
+            ? AuthoredWorkdayPoint(authoredBeat, ctx)
+            : WorkdayPoint(ctx);
+    }
+
+    private WorkdayState DefaultWorkdayState(float clock)
+    {
+        float share = WorkProfile.DeskShare;
+        float normalized = clock / Bal.ShiftSeconds;
+        if (MovementStyle == WorkdayMovementStyle.SnackSeeker && normalized > 0.2f && normalized < 0.85f)
+            return WorkdayState.StationaryUse;
+        if (MovementStyle == WorkdayMovementStyle.CoffeeSeeker && normalized > 0.15f && normalized < 0.9f)
+            return WorkdayState.CoffeeBreak;
+        if (MovementStyle == WorkdayMovementStyle.SocialButterfly && normalized > 0.25f && normalized < 0.8f)
+            return WorkdayState.WaterCooler;
+        if (MovementStyle == WorkdayMovementStyle.DeskAnchor && share > 0.75f)
+            return WorkdayState.WorkingAtDesk;
+        return WorkdaySchedule[(int)(clock / WorkdaySlotSeconds) % WorkdaySchedule.Length];
+    }
+
+    private Vector3 AuthoredWorkdayPoint(WorkdayBeat beat, AiContext ctx)
+    {
+        if (beat.Destination == "desk") return HomePos;
+        if (beat.Destination == "break") return ctx.CoffeePoint;
+        if (beat.Destination == "printer") return new Vector3(-27f, 0f, -10.5f);
+        if (beat.Destination == "server") return new Vector3(-22f, 0f, -18f);
+        if (beat.Destination == "closet") return new Vector3(26f, 0f, 11f);
+        if (beat.Destination == "reception") return new Vector3(0f, 0f, 17f);
+        var points = ctx.WorldRef.WaypointsFor(beat.Destination);
+        return points.Length > 0 ? points[0] : WorkdayPoint(ctx);
     }
 
     public bool WorkdayNeedsMovement => WorkState is
@@ -614,6 +777,8 @@ public static class AiDirector
         {
             n.TickMemories((float)dt);
             n.TickReactionCooldowns((float)dt);
+            n.TickAreaHint((float)dt);
+            n.TickFloorTransition((float)dt);
             n.Stats.Recover((float)dt);
         }
         bool watched = false;
@@ -963,6 +1128,8 @@ public static class AiDirector
 
             // --- suspicion climax ---
             float reportThreshold = 100f - (1f - n.Personality.Agreeableness) * 20f;
+        if (n.PrimaryObservation is StaffObservationChannel.PanicAndRumor or StaffObservationChannel.IdentityAndVisitors)
+            reportThreshold *= 0.85f;
             if (n.Suspicion >= reportThreshold && n.State == NpcState.Routine)
             {
                 if (n.Arch == Archetype.Grifter)
@@ -1132,7 +1299,7 @@ public static class AiDirector
     {
         if (!g.Awake) return;
 
-        // even Briggs cannot resist the photocopied face
+        // even Mr Purple cannot resist the photocopied face
         if (g.DistractTimer > 0 && g.State != NpcState.Hunt)
         {
             g.DistractTimer -= (float)dt;
@@ -1146,6 +1313,7 @@ public static class AiDirector
             if (sees)
             {
                 g.LastSeenPlayer = ctx.PlayerPos;
+                g.RememberAreaHint(ctx.PlayerPos, WorkdayBalance.AreaHintConfidence, WorkdayBalance.BossHintMemorySeconds);
                 g.LostSightTimer = 0;
                 if (ctx.PlayerCarrying)
                     ctx.AlertTimer = System.Math.Max(ctx.AlertTimer, 8); // personally witnessing carrying refreshes the hunt
@@ -1155,7 +1323,8 @@ public static class AiDirector
                 g.LostSightTimer += (float)dt;
             }
 
-            bool arrived = g.StepToward(ctx.WorldRef, g.LastSeenPlayer, dt);
+            Vector3 huntTarget = g.LastSeenAreaHint ?? g.LastSeenPlayer;
+            bool arrived = g.StepToward(ctx.WorldRef, huntTarget, dt);
             float dist = g.Pos.DistanceTo(ctx.PlayerPos);
             if (dist < Bal.GuardCatchDist)
             {
@@ -1167,18 +1336,32 @@ public static class AiDirector
                 ctx.AlertTimer <= 0)
             {
                 g.State = NpcState.Routine;
+                g.ClearAreaHint();
                 g.MoveTarget = null;
                 g.PauseTimer = 1f;
                 ctx.AlertTimer = 0;
-                ctx.Toast?.Invoke("Briggs lost you. He pretends he meant to walk here all along.", ToastKind.Info);
+                ctx.Toast?.Invoke("Mr Purple lost you. He pretends he meant to walk here all along.", ToastKind.Info);
             }
+            return;
+        }
+
+        // patrol: on easy/standard difficulty Mr Purple spends part of the day in his office.
+        // Hard mode keeps him moving, but he still follows visible patrol posts.
+        float bossHour = WorkdayBalance.WorkdayStartHour + ctx.WorkdayElapsed / (Bal.ShiftSeconds / (WorkdayBalance.WorkdayEndHour - WorkdayBalance.WorkdayStartHour));
+        var bossProfile = new BossBehaviorProfile(ctx.BossDifficulty);
+        bool atDeskBeat = (bossHour - WorkdayBalance.WorkdayStartHour) / (WorkdayBalance.WorkdayEndHour - WorkdayBalance.WorkdayStartHour) < bossProfile.DeskShare;
+        if (atDeskBeat && !ctx.NoiseFresh)
+        {
+            g.MoveTarget = g.HomePos;
+            g.StepToward(ctx.WorldRef, g.HomePos, dt, Bal.GuardPatrolSpeed);
+            g.Moving = false;
             return;
         }
 
         // patrol
         if (ctx.NoiseFresh)
         {
-            // recent noise: Briggs checks it out personally
+            // recent noise: Mr Purple checks it out personally
             if (g.StepToward(ctx.WorldRef, ctx.NoisePos, dt, Bal.GuardPatrolSpeed * 1.3f))
                 g.Moving = false;
         }
@@ -1198,7 +1381,7 @@ public static class AiDirector
         // guard personally witnessing blatant crime
         if ((ctx.CanSee?.Invoke(g, ctx.PlayerPos, 1f) ?? false) && ctx.PlayerCarrying)
         {
-            ctx.Toast?.Invoke("Briggs saw you carrying a \"mannequin\". He is not buying it.", ToastKind.Warn);
+            ctx.Toast?.Invoke("Mr Purple saw you carrying a \"mannequin\". He is not buying it.", ToastKind.Warn);
             g.State = NpcState.Hunt;
             g.LastSeenPlayer = ctx.PlayerPos;
             ctx.AlertTimer = System.Math.Max(ctx.AlertTimer, Bal.GuardAlertSeesCarry);
@@ -1212,7 +1395,7 @@ public static class AiDirector
             if (b == g || b.State != NpcState.Out || !b.Body.Visible) continue;
             if (ctx.CanSee?.Invoke(g, b.Pos, 1f) ?? false)
             {
-                ctx.Toast?.Invoke($"Briggs found {b.NpcName}'s body. He has decided it was you.", ToastKind.Warn);
+                ctx.Toast?.Invoke($"Mr Purple found {b.NpcName}'s body. He has decided it was you.", ToastKind.Warn);
                 g.State = NpcState.Hunt;
                 g.LastSeenPlayer = ctx.PlayerPos;
                 ctx.AlertTimer = System.Math.Max(ctx.AlertTimer, Bal.GuardAlertFindsBody);
@@ -1224,7 +1407,7 @@ public static class AiDirector
         {
             if (ctx.CanSee?.Invoke(g, s.Pos, 0.9f) ?? false)
             {
-                ctx.Toast?.Invoke("Briggs found a bloodstain and is connecting dots that don't exist.", ToastKind.Warn);
+                ctx.Toast?.Invoke("Mr Purple found a bloodstain and is connecting dots that don't exist.", ToastKind.Warn);
                 g.State = NpcState.Hunt;
                 g.LastSeenPlayer = ctx.PlayerPos;
                 ctx.AlertTimer = System.Math.Max(ctx.AlertTimer, Bal.GuardAlertFindsBlood);

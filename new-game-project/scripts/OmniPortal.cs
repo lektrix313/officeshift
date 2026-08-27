@@ -349,17 +349,27 @@ public partial class OmniPortal : CanvasLayer
 
     private void BuildStaffList()
     {
-        _header.Text = "OMNIPORTAL — staff directory / behavioral risk";
+        _header.Text = $"OMNIPORTAL — staff directory / 19 coworkers + Agent Red";
         foreach (var child in _listBox.GetChildren()) child.QueueFree();
 
         var gm = GameMode.Instance;
         if (gm == null) return;
+        var profileSummary = new Label
+        {
+            Text = $"YOUR COMPANY PROFILE — suspicion {gm.PlayerProfile.Suspicion:F0} ({gm.PlayerProfile.SuspicionBand}) | loyalty {gm.PlayerProfile.Loyalty:F0} ({gm.PlayerProfile.LoyaltyBand}) | work {gm.PlayerProfile.Work:F0} ({gm.PlayerProfile.WorkBand}) | trust {gm.PlayerProfile.CompanyTrust:F0}\n" +
+                "Keep the job believable, look loyal, and remember: a perfect frame can still make the next company suspicious.",
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            CustomMinimumSize = new Vector2(700, 0),
+        };
+        profileSummary.AddThemeFontSizeOverride("font_size", 14);
+        profileSummary.Modulate = Color.FromHtml("39d97a");
+        _listBox.AddChild(profileSummary);
         foreach (var n in gm.Npcs)
         {
             var profile = n.Personality;
             var persona = Personas.For(n.NpcName);
             var row = new VBoxContainer();
-            var head = new Label { Text = $"{n.NpcName}  —  {persona.Role}" };
+            var head = new Label { Text = $"{n.NpcName}  —  {n.Job} / {n.Department}" };
             head.AddThemeFontSizeOverride("font_size", 16);
             head.Modulate = n == gm.Guard ? Color.FromHtml("ff8d6b") : Color.FromHtml("ffd76a");
             row.AddChild(head);
@@ -367,8 +377,11 @@ public partial class OmniPortal : CanvasLayer
             {
                 Text = $"{persona.Traits}\n{profile.Summary}\nTell: {Personas.BehavioralTell(n.NpcName)}\n" +
                     $"Stats: focus {n.Stats.Focus:P0} | patience {n.Stats.Patience:P0} | resilience {n.Stats.StressResilience:P0} | comfort need {n.Stats.ComfortNeed:P0}\n" +
+                    $"Observe: {n.PrimaryObservation} / {n.SecondaryObservation}\n" +
+                    $"Hook: {n.StaffProfile.RPGHook}\n" +
                     $"Affinity: IT {n.Stats.ITAffinity:P0} | Facilities {n.Stats.FacilitiesAffinity:P0} | Security {n.Stats.SecurityAffinity:P0}\n" +
                     $"Stress {n.Stats.CurrentStress:P0} | comfort {n.Stats.CurrentComfort:P0}\n" +
+                    $"Attitude: {(n.Attitude.Active ? n.Attitude.Kind.ToString() : "comfortable")} | strength {n.Attitude.Strength:P0} | {n.Attitude.RemainingSeconds:F0}s remaining\n" +
                     $"Reaction: {n.ActiveStimulus?.ToString() ?? "none"} | activation {n.ReactionActivation:F2} | cooldown {n.ReactionCooldownRemaining:F1}s\n" +
                     $"Action: {n.ReactionAction} | {n.ReactionText}",
                 AutowrapMode = TextServer.AutowrapMode.WordSmart,

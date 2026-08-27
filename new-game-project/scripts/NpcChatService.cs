@@ -139,17 +139,17 @@ public static class NpcChatService
 
         string flavor = persona.Name switch
         {
-            "Keith" => "Interesting. VERY interesting. This is going in the spreadsheet.",
+            "Bob" => "Interesting. VERY interesting. This is going in the spreadsheet.",
             "Dave" => "Mmh. Sure. Whatever. Is there food there?",
-            "Susan" => "Oh my god. Okay. Say no more — and you didn't hear this from me.",
+            "Pam" => "Oh my god. Okay. Say no more — and you didn't hear this from me.",
             "Tom" => "Hmm. What's in it for me? ...Fine, consider us even.",
-            "Greg" => "Fine! But if the thermostat drifts while I'm gone, that's on you.",
+            "Sleepy Steve" => "Fine! But if the thermostat drifts while I'm gone, that's on you.",
             "Janet" => "Oh— okay. As long as it's away from the printer. It knows I'm here.",
             "Priya" => "Make it quick. I'm on a schedule.",
-            "Margaret" => "Sweetheart, I've survived four mergers. Lead the way.",
+            "Boss Barbara" => "Sweetheart, I've survived four mergers. Lead the way.",
             "Linda" => "Let me water the ficus first. ...Okay. Plants are resilient. So am I.",
             "Barry" => "Bro. Broooo. Take the batch. We walk.",
-            "Briggs" => "If this is procedure, I'll follow. If it isn't... we'll see.",
+            "Mr Purple" => "If this is procedure, I'll follow. If it isn't... we'll see.",
             _ => "Sure. Fine.",
         };
 

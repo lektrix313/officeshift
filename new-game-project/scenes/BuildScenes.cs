@@ -21,6 +21,10 @@ using Godot;
 ///         --script res://scenes/BuildScenes.cs ++ capture reactions
 ///   godot --write-movie shots/object_states_frame.png --fixed-fps 30 --quit-after 500
 ///         --script res://scenes/BuildScenes.cs ++ capture object_states
+///   godot --write-movie shots/profile_frame.png --fixed-fps 30 --quit-after 600
+///         --script res://scenes/BuildScenes.cs ++ capture profile
+///   godot --write-movie shots/workday_social_frame.png --fixed-fps 30 --quit-after 600
+///         --script res://scenes/BuildScenes.cs ++ capture workday_social
 /// </summary>
 public partial class BuildScenes : SceneTree
 {
@@ -246,6 +250,8 @@ public partial class CaptureDriver : Node
         else if (_mode == "workday") WorkdayStep(gm, p);
         else if (_mode == "reactions") ReactionsStep(gm, p);
         else if (_mode == "object_states") ObjectStatesStep(gm, p);
+        else if (_mode == "profile") ProfileStep(gm, p);
+        else if (_mode == "workday_social") WorkdaySocialStep(gm, p);
         else SimStep(gm, p);
     }
 
@@ -596,6 +602,36 @@ public partial class CaptureDriver : Node
             gm.AppealCase();
         if (_frame == 190)
             gm.Portal?.OpenStaffDirectory();
+    }
+
+    // Exercise the fun-first profile: visible work, credit-taking, a report, then recovery.
+    private void ProfileStep(GameMode gm, PlayerController p)
+    {
+        if (_frame == 20 && !gm.Over)
+        {
+            gm.Started = true;
+            Input.MouseMode = Input.MouseModeEnum.Captured;
+        }
+        if (_frame == 40) gm.ApplyPlayerAction(ConsequenceActions.VisibleWork, 1f, 1f);
+        if (_frame == 100) gm.ApplyPlayerAction(ConsequenceActions.TakeCredit, 0.8f, 1f);
+        if (_frame == 160) gm.ApplyPlayerAction(ConsequenceActions.FramedReport, 0.7f, 0.9f);
+        if (_frame == 220) gm.ApplyPlayerAction(ConsequenceActions.HelpCoworker, 1f, 1f);
+        if (_frame == 300) gm.Portal?.OpenStaffDirectory();
+        if (_frame == 500) gm.CloseUI();
+    }
+
+    // Schedule Accounts at 3 PM, then watch the department move together while the player gets access to empty desks.
+    private void WorkdaySocialStep(GameMode gm, PlayerController p)
+    {
+        if (_frame == 20 && !gm.Over)
+        {
+            gm.Started = true;
+            Input.MouseMode = Input.MouseModeEnum.Captured;
+            gm.BossDifficulty = BossDifficulty.Easy;
+        }
+        if (_frame == 45) gm.ScheduleDepartmentMeeting("Accounts", 15f, "meeting_a", "desk computer");
+        if (_frame == 120) gm.Portal?.OpenStaffDirectory();
+        if (_frame == 420) gm.CloseUI();
     }
 
     // dispose Keith → hide Susan until discovery/police interview → forge Janet's resignation

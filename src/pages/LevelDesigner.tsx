@@ -89,13 +89,49 @@ interface DressingItem {
   label: string;
 }
 
+interface StaffAssignment {
+  id: string;
+  name: string;
+  job: string;
+  department: Department;
+  floorId: string;
+  x: number;
+  y: number;
+  homeElementId: string | null;
+  waypointTags: string[];
+  isExecutiveThreat: boolean;
+}
+
+interface WorkshopFloorLink {
+  id: string;
+  fromFloor: string;
+  toFloor: string;
+  elementId: string;
+}
+
+interface WorkshopWaypoint {
+  id: string;
+  floorId: string;
+  label: string;
+  x: number;
+  y: number;
+  tags: string[];
+  capacity: number;
+  visibility: number;
+  socialValue: number;
+  coverValue: number;
+}
+
 interface WorkshopDocument {
   format: 'office-shift-workshop';
-  version: 1;
+  version: 2;
   business: string;
   floors: LevelFloor[];
   elements: LevelElement[];
   accessCards: AccessCard[];
+  staff: StaffAssignment[];
+  waypoints: WorkshopWaypoint[];
+  floorLinks: WorkshopFloorLink[];
   dressing: DressingItem[];
 }
 
@@ -114,6 +150,7 @@ interface PaletteItem {
 }
 
 const DEPARTMENTS: Department[] = ['General', 'Janitorial', 'IT', 'HR', 'Accounts', 'Sales', 'Security'];
+const CANONICAL_STAFF = ['Bob', 'Sleepy Steve', 'Pam', 'Mr Purple', 'Fran', 'Chad', 'Rita', 'Mailroom Mike', 'Dave', 'Liz', 'Nervous Ned', 'Manager Mo', 'Jen', 'Data Dave', 'Boring Bill', 'Boss Barbara', 'Joe', 'Kevin', 'Old Tom'];
 const ACCESS_METHODS: AccessMethod[] = ['Steal', 'Gaslight', 'Charm', 'Seduce', 'Impersonate'];
 const ROOM_NAMES = ['Open office', 'Server room', 'HR suite', 'Meeting room', 'Reception', 'Janitor closet', 'Accounts'];
 
@@ -209,9 +246,11 @@ function initialDressing(): DressingItem[] {
 }
 
 function starterDocument(): WorkshopDocument {
+  const elements = starterElements();
   return {
-    format: 'office-shift-workshop', version: 1, business: 'OmniCore Industries',
-    floors: initialFloors, elements: starterElements(), accessCards: initialCards, dressing: initialDressing(),
+    format: 'office-shift-workshop', version: 2, business: 'OmniCore Industries',
+    floors: initialFloors, elements, accessCards: initialCards,
+    staff: [], waypoints: [], floorLinks: [], dressing: initialDressing(),
   };
 }
 
@@ -245,6 +284,7 @@ export default function LevelDesigner({ onPlay }: LevelDesignerProps) {
   const [document, setDocument] = useState<WorkshopDocument>(() => starterDocument());
   const [floorId, setFloorId] = useState('floor-1');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedRecord, setSelectedRecord] = useState<{ kind: 'element' | 'staff' | 'waypoint'; id: string } | null>(null);
   const [activeTool, setActiveTool] = useState<ElementType>('wall');
   const [category, setCategory] = useState<ToolCategory>('structure');
   const [showGrid, setShowGrid] = useState(true);
@@ -263,6 +303,8 @@ export default function LevelDesigner({ onPlay }: LevelDesignerProps) {
     [currentFloor.id, document.elements],
   );
   const selected = document.elements.find(element => element.id === selectedId) ?? null;
+  const selectedStaff = selectedRecord?.kind === 'staff' ? document.staff.find(member => member.id === selectedRecord.id) ?? null : null;
+  const selectedWaypoint = selectedRecord?.kind === 'waypoint' ? document.waypoints.find(waypoint => waypoint.id === selectedRecord.id) ?? null : null;
   const activePalette = palette.filter(item => item.category === category);
   const validation = useMemo(() => {
     const issues: string[] = [];
@@ -321,6 +363,7 @@ export default function LevelDesigner({ onPlay }: LevelDesignerProps) {
     };
     updateDocument(draft => draft.elements.push(element));
     setSelectedId(element.id);
+    setSelectedRecord({ kind: 'element', id: element.id });
   };
 
   const handleCanvasPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -332,6 +375,7 @@ export default function LevelDesigner({ onPlay }: LevelDesignerProps) {
     event.stopPropagation();
     const point = canvasPoint(event);
     setSelectedId(element.id);
+    setSelectedRecord({ kind: 'element', id: element.id });
     setDragging({ id: element.id, offset: { x: point.x - element.x, y: point.y - element.y } });
     event.currentTarget.setPointerCapture(event.pointerId);
   };
@@ -364,11 +408,42 @@ export default function LevelDesigner({ onPlay }: LevelDesignerProps) {
   };
 
   const deleteSelected = () => {
-    if (!selectedId) return;
-    updateDocument(draft => {
-      draft.elements = draft.elements.filter(element => element.id !== selectedId);
-    });
+    if (selectedRecord?.kind === 'staff') {
+      updateDocument(draft => { draft.staff = draft.staff.filter(member => member.id !== selectedRecord.id); });
+    } else if (selectedRecord?.kind === 'waypoint') {
+      updateDocument(draft => { draft.waypoints = draft.waypoints.filter(waypoint => waypoint.id !== selectedRecord.id); });
+    } else if (selectedId) {
+      updateDocument(draft => { draft.elements = draft.elements.filter(element => element.id !== selectedId); });
+    } else return;
     setSelectedId(null);
+    setSelectedRecord(null);
+  };
+
+  const addStaffAssignment = () => {
+    const name = CANONICAL_STAFF.find(candidate => !document.staff.some(member => member.name === candidate)) ?? CANONICAL_STAFF[0];
+    const member: StaffAssignment = { id: idFor('staff'), name, job: 'Assigned from canonical roster', department: 'General', floorId: currentFloor.id, x: Math.floor(currentFloor.width / 2), y: Math.floor(currentFloor.height / 2), homeElementId: null, waypointTags: ['Desk'], isExecutiveThreat: name === 'Mr Purple' };
+    updateDocument(draft => draft.staff.push(member));
+    setSelectedRecord({ kind: 'staff', id: member.id });
+    setSelectedId(null);
+    setStatus(`${name} assigned to ${currentFloor.name}`);
+  };
+
+  const addWaypoint = () => {
+    const waypoint: WorkshopWaypoint = { id: idFor('waypoint'), floorId: currentFloor.id, label: 'New waypoint', x: Math.floor(currentFloor.width / 2), y: Math.floor(currentFloor.height / 2), tags: ['Desk'], capacity: 4, visibility: .5, socialValue: .5, coverValue: .5 };
+    updateDocument(draft => draft.waypoints.push(waypoint));
+    setSelectedRecord({ kind: 'waypoint', id: waypoint.id });
+    setSelectedId(null);
+    setStatus('Waypoint added');
+  };
+
+  const addFloorLink = () => {
+    const fromFloor = currentFloor.id;
+    const toFloor = document.floors.find(floor => floor.id !== fromFloor)?.id ?? fromFloor;
+    const element = visibleElements.find(item => item.type === 'elevator' || item.type === 'stair');
+    if (!element || fromFloor === toFloor) { setStatus('Place an elevator or stair and add another floor first'); return; }
+    const link: WorkshopFloorLink = { id: idFor('link'), fromFloor, toFloor, elementId: element.id };
+    updateDocument(draft => draft.floorLinks.push(link));
+    setStatus('Floor link added');
   };
 
   const addFloor = () => {
@@ -400,11 +475,13 @@ export default function LevelDesigner({ onPlay }: LevelDesignerProps) {
     setStatus('Workshop JSON exported');
   };
 
-  const saveGodot = () => {
-    const godot = {
-      format: 'office-shift-godot-level', version: 1, business: document.business,
-      floors: document.floors.map(floor => ({ ...floor, elements: document.elements.filter(element => element.floorId === floor.id) })),
+  const saveGodot = () => {    const godot = {
+      format: 'office-shift-godot-level', version: 2, business: document.business,
+      floors: document.floors.map(floor => ({ ...floor, elements: document.elements.filter(element => element.floorId === floor.id), waypoints: document.waypoints.filter(waypoint => waypoint.floorId === floor.id), staff: document.staff.filter(member => member.floorId === floor.id) })),
       accessCards: document.accessCards,
+      staff: document.staff,
+      waypoints: document.waypoints,
+      floorLinks: document.floorLinks,
       dressing: document.dressing,
     };
     safeJsonDownload(`${document.business.toLowerCase().replaceAll(' ', '-')}-godot.json`, godot);
@@ -421,7 +498,11 @@ export default function LevelDesigner({ onPlay }: LevelDesignerProps) {
         if (parsed.format !== 'office-shift-workshop' || !Array.isArray(parsed.floors) || !Array.isArray(parsed.elements)) throw new Error('Invalid workshop document');
         const normalized: WorkshopDocument = {
           ...parsed,
+          version: 2,
           accessCards: (Array.isArray(parsed.accessCards) ? parsed.accessCards : initialCards).map(card => ({ ...card, methods: Array.isArray(card.methods) && card.methods.length ? card.methods : ['Steal'] })),
+          staff: Array.isArray(parsed.staff) ? parsed.staff : [],
+          waypoints: Array.isArray(parsed.waypoints) ? parsed.waypoints : [],
+          floorLinks: Array.isArray(parsed.floorLinks) ? parsed.floorLinks : [],
           dressing: Array.isArray(parsed.dressing) ? parsed.dressing : [],
         };
         setDocument(normalized);
@@ -450,6 +531,16 @@ export default function LevelDesigner({ onPlay }: LevelDesignerProps) {
 
   const toggleCardMethod = (card: AccessCard, method: AccessMethod) => {
     updateCard(card.id, { methods: card.methods.includes(method) ? card.methods.filter(item => item !== method) : [...card.methods, method] });
+  };
+
+  const updateStaff = (patch: Partial<StaffAssignment>) => {
+    if (!selectedStaff) return;
+    updateDocument(draft => { const member = draft.staff.find(item => item.id === selectedStaff.id); if (member) Object.assign(member, patch); });
+  };
+
+  const updateWaypoint = (patch: Partial<WorkshopWaypoint>) => {
+    if (!selectedWaypoint) return;
+    updateDocument(draft => { const waypoint = draft.waypoints.find(item => item.id === selectedWaypoint.id); if (waypoint) Object.assign(waypoint, patch); });
   };
 
   const updateFloor = (patch: Partial<LevelFloor>) => {
@@ -558,6 +649,8 @@ export default function LevelDesigner({ onPlay }: LevelDesignerProps) {
                   {item.type === 'light' ? '▰' : item.type === 'plant' ? '✦' : '▣'}
                 </div>
               ))}
+              {document.staff.filter(member => member.floorId === currentFloor.id).map(member => <button key={member.id} className="dressing-marker dressing-staff" style={{ left: `${((member.x - 1) / currentFloor.width) * 100}%`, top: `${((member.y - 1) / currentFloor.height) * 100}%` }} onClick={event => { event.stopPropagation(); setSelectedId(null); setSelectedRecord({ kind: 'staff', id: member.id }); }} title={`Staff: ${member.name}`}>●</button>)}
+              {document.waypoints.filter(waypoint => waypoint.floorId === currentFloor.id).map(waypoint => <button key={waypoint.id} className="dressing-marker dressing-waypoint" style={{ left: `${((waypoint.x - 1) / currentFloor.width) * 100}%`, top: `${((waypoint.y - 1) / currentFloor.height) * 100}%` }} onClick={event => { event.stopPropagation(); setSelectedId(null); setSelectedRecord({ kind: 'waypoint', id: waypoint.id }); }} title={`Waypoint: ${waypoint.label}`}>+</button>)}
               {visibleElements.map(element => {
                 const isSelected = element.id === selectedId;
                 return (
@@ -598,6 +691,22 @@ export default function LevelDesigner({ onPlay }: LevelDesignerProps) {
             <div className="field-row"><label className="field-label">Grid width<input type="number" min={12} max={60} value={currentFloor.width} onChange={event => updateFloor({ width: Math.max(12, Math.min(60, Number(event.target.value))) })} /></label><label className="field-label">Grid height<input type="number" min={10} max={40} value={currentFloor.height} onChange={event => updateFloor({ height: Math.max(10, Math.min(40, Number(event.target.value))) })} /></label></div>
             <div className="field-note">Every placement snaps to this grid. Keep a clear aisle from the reception strip to each access-controlled room.</div>
           </div>}
+          {selectedStaff && <div className="inspector-fields">
+            <div className="selection-summary"><span className="summary-icon palette-reception"><Users size={16} /></span><div><strong>{selectedStaff.name}</strong><small>Canonical staff assignment</small></div><button className="icon-button danger-icon" title="Delete staff assignment" onClick={deleteSelected}><Trash2 size={15} /></button></div>
+            <label className="field-label">Staff member<select value={selectedStaff.name} onChange={event => updateStaff({ name: event.target.value, isExecutiveThreat: event.target.value === 'Mr Purple' })}>{CANONICAL_STAFF.map(name => <option key={name}>{name}</option>)}</select></label>
+            <label className="field-label">Department<select value={selectedStaff.department} onChange={event => updateStaff({ department: event.target.value as Department })}>{DEPARTMENTS.map(department => <option key={department}>{department}</option>)}</select></label>
+            <div className="field-row"><label className="field-label">Grid X<input type="number" min={1} max={currentFloor.width} value={selectedStaff.x} onChange={event => updateStaff({ x: Math.max(1, Math.min(currentFloor.width, Number(event.target.value))) })} /></label><label className="field-label">Grid Y<input type="number" min={1} max={currentFloor.height} value={selectedStaff.y} onChange={event => updateStaff({ y: Math.max(1, Math.min(currentFloor.height, Number(event.target.value))) })} /></label></div>
+            <label className="field-label">Home element<select value={selectedStaff.homeElementId ?? ''} onChange={event => updateStaff({ homeElementId: event.target.value || null })}><option value="">None</option>{visibleElements.map(element => <option key={element.id} value={element.id}>{element.label}</option>)}</select></label>
+            <label className="check-line"><input type="checkbox" checked={selectedStaff.isExecutiveThreat} onChange={event => updateStaff({ isExecutiveThreat: event.target.checked })} /><span>Executive threat / roaming boss</span></label>
+          </div>}
+          {selectedWaypoint && <div className="inspector-fields">
+            <div className="selection-summary"><span className="summary-icon palette-terminal"><MousePointer2 size={16} /></span><div><strong>{selectedWaypoint.label}</strong><small>Authored NPC navigation anchor</small></div><button className="icon-button danger-icon" title="Delete waypoint" onClick={deleteSelected}><Trash2 size={15} /></button></div>
+            <label className="field-label">Label<input value={selectedWaypoint.label} onChange={event => updateWaypoint({ label: event.target.value })} /></label>
+            <div className="field-row"><label className="field-label">Grid X<input type="number" min={1} max={currentFloor.width} value={selectedWaypoint.x} onChange={event => updateWaypoint({ x: Math.max(1, Math.min(currentFloor.width, Number(event.target.value))) })} /></label><label className="field-label">Grid Y<input type="number" min={1} max={currentFloor.height} value={selectedWaypoint.y} onChange={event => updateWaypoint({ y: Math.max(1, Math.min(currentFloor.height, Number(event.target.value))) })} /></label></div>
+            <div className="field-row"><label className="field-label">Capacity<input type="number" min={1} max={32} value={selectedWaypoint.capacity} onChange={event => updateWaypoint({ capacity: Math.max(1, Math.min(32, Number(event.target.value))) })} /></label><label className="field-label">Visibility<input type="number" min={0} max={1} step={.1} value={selectedWaypoint.visibility} onChange={event => updateWaypoint({ visibility: Math.max(0, Math.min(1, Number(event.target.value))) })} /></label></div>
+            <div className="field-row"><label className="field-label">Social value<input type="number" min={0} max={1} step={.1} value={selectedWaypoint.socialValue} onChange={event => updateWaypoint({ socialValue: Math.max(0, Math.min(1, Number(event.target.value))) })} /></label><label className="field-label">Cover value<input type="number" min={0} max={1} step={.1} value={selectedWaypoint.coverValue} onChange={event => updateWaypoint({ coverValue: Math.max(0, Math.min(1, Number(event.target.value))) })} /></label></div>
+            <label className="field-label">Tags (comma separated)<input value={selectedWaypoint.tags.join(', ')} onChange={event => updateWaypoint({ tags: event.target.value.split(',').map(tag => tag.trim()).filter(Boolean) })} /></label>
+          </div>}
           {selected && <div className="inspector-fields">
             <label className="field-label">Label<input value={selected.label} onChange={event => updateSelected({ label: event.target.value })} /></label>
             <div className="field-row"><label className="field-label">X<input type="number" min={1} value={selected.x} onChange={event => updateSelected({ x: Math.max(1, Number(event.target.value)) })} /></label><label className="field-label">Y<input type="number" min={1} value={selected.y} onChange={event => updateSelected({ y: Math.max(1, Number(event.target.value)) })} /></label></div>
@@ -609,6 +718,8 @@ export default function LevelDesigner({ onPlay }: LevelDesignerProps) {
             <label className="check-line"><input type="checkbox" checked={selected.gameplay} onChange={event => updateSelected({ gameplay: event.target.checked })} /><span>Gameplay collision / interaction</span></label>
             <div className="field-note">Placeholder geometry keeps this footprint when an authored asset replaces it.</div>
           </div>}
+
+          <div className="inspector-section access-section"><div className="rail-heading"><span>Staff & waypoints</span><span className="selection-state">{document.staff.length} / {CANONICAL_STAFF.length}</span></div><div className="access-note"><Users size={14} /><span>Author canonical staff positions and navigation anchors for the imported runtime level.</span></div><div className="footer-actions"><button className="footer-button" onClick={addStaffAssignment}><Users size={14} /> Add staff</button><button className="footer-button" onClick={addWaypoint}><MousePointer2 size={14} /> Add waypoint</button><button className="footer-button" onClick={addFloorLink}><Layers3 size={14} /> Link floor</button></div></div>
 
           <div className="inspector-section access-section"><div className="rail-heading"><span>Access cards</span><button className="icon-button add-floor" title="Add access card" onClick={addCard}><Plus size={15} /></button></div><div className="access-list">{document.accessCards.map(card => <div className="access-card-row" key={card.id}><span className="card-chip" style={{ background: card.color }}><KeyRound size={13} /></span><div className="access-card-info"><input value={card.name} onChange={event => updateCard(card.id, { name: event.target.value })} /><small><input value={card.holder} onChange={event => updateCard(card.id, { holder: event.target.value })} /></small><div className="method-chips">{ACCESS_METHODS.map(method => <button key={method} className={`method-chip ${card.methods.includes(method) ? 'active' : ''}`} onClick={() => toggleCardMethod(card, method)}>{method}</button>)}</div></div><select value={card.level} onChange={event => updateCard(card.id, { level: Number(event.target.value) })} aria-label={`${card.name} clearance level`}><option value={1}>L1</option><option value={2}>L2</option><option value={3}>L3</option><option value={4}>L4</option></select></div>)}</div><div className="access-note"><LockKeyhole size={14} /><span>Cards are the gate. Tag a room or door, then route access through stealing, charm, impersonation, or social engineering.</span></div></div>
 

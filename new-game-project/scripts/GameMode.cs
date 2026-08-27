@@ -1,5 +1,6 @@
 ﻿using Godot;
 using System.Collections.Generic;
+using System.Linq;
 
 /// <summary>
 /// Root orchestrator attached to scenes/main.tscn. Owns the shift loop,
@@ -30,6 +31,10 @@ public partial class GameMode : Node3D
     public double AlertTimer;
     public bool BeingWatched;
     public float MaxSuspicionValue;
+    public PlayerConsequenceProfile PlayerProfile { get; } = new();
+    public BossDifficulty BossDifficulty { get; set; } = BossDifficulty.Easy;
+    public SocialSimulation Social { get; } = new();
+    public MultiFloorNavigation Navigation { get; } = new();
     public bool UIOpen;
     public bool StinkActive => WorldEvents.StinkActive;
     public bool VendingLaxativeTaken;
@@ -68,6 +73,9 @@ public partial class GameMode : Node3D
     private float _chatterTimer = 9f;
     private float _gossipTimer = 7f;
     private float _hudTimer;
+    private readonly List<ScheduledMeeting> _scheduledMeetings = new();
+
+    private sealed record ScheduledMeeting(string Department, float Hour, string Room, string Source);
 
     /// <summary>Bodies awaiting their post-settle blood pool (port of poolSpawned logic).</summary>
     private readonly Dictionary<NpcBrain, float> _poolTimers = new();
@@ -126,7 +134,34 @@ public partial class GameMode : Node3D
         }
         AddChild(WorldRef);
 
+        var rosterErrors = RosterInvariantChecks.Validate();
+        foreach (var error in rosterErrors) GD.PushError($"[Roster] {error}");
+        if (rosterErrors.Count > 0) return;
+        var workshopPath = Godot.FileAccess.FileExists("user://workshop.json") ? "user://workshop.json" : Godot.FileAccess.FileExists("res://workshop.json") ? "res://workshop.json" : "";
+        string workshopError = "";
+        var workshop = string.IsNullOrEmpty(workshopPath) ? null : WorkshopLevelData.Load(workshopPath, out workshopError);
+        if (workshop == null && !string.IsNullOrEmpty(workshopPath))
+            GD.PushWarning($"[Workshop] {workshopError} Falling back to canonical starter layout.");
+        if (workshop != null)
+        {
+            var navigationError = MultiFloorNavigation.Validate(workshop);
+            if (!string.IsNullOrEmpty(navigationError))
+            {
+                GD.PushWarning($"[Workshop] {navigationError} Falling back to canonical navigation.");
+                workshop = null;
+            }
+            else Navigation.AddWorkshopFloors(workshop);
+        }
+
         // ---- systems ----
+        Social.SetSeed(42);
+        Social.AddDefaultWaypoints();
+        if (workshop != null)
+        {
+            foreach (var waypoint in workshop.Waypoints) Social.AddWorkshopWaypoint(waypoint);
+            BindWorkshopAccess(workshop);
+            Toast($"WORKSHOP LOADED: {workshop.Business} · {workshop.Waypoints.Count} authored waypoints", ToastKind.Success);
+        }
         Blood = new BloodSystem { Name = "Blood" };
         AddChild(Blood);
         Synth = new BlipSynth { Name = "Synth" };
@@ -145,14 +180,17 @@ public partial class GameMode : Node3D
 
         // ---- coworkers ----
         int rosterIndex = 0;
-        foreach (var def in Roster.Coworkers)
+        foreach (var assignment in CanonicalStaff.Assignments)
         {
             var body = new NpcBody();
-            body.Init(def.Name, def.Arch);
+            body.Init(assignment.Profile.Name, assignment.Archetype);
             AddChild(body);
-            body.Position = new Vector3(def.X, 0f, def.Z);
-            var brain = NpcBrain.Create(body, def.Zone);
+            var authored = workshop?.Staff.FirstOrDefault(member => member.Name.Equals(assignment.Profile.Name, System.StringComparison.OrdinalIgnoreCase));
+            body.Position = authored == null ? assignment.SpawnPosition : new Vector3(-28f + authored.X * 2f, 0f, -20f + authored.Y * 2f);
+            var brain = NpcBrain.Create(body, assignment.Zone);
+            brain.SetFloor(authored?.FloorId ?? "floor-1");
             brain.InitializeWorkday(rosterIndex++);
+            Social.RegisterNpc(brain.NpcName, rosterIndex);
             Npcs.Add(brain);
         }
 
@@ -171,9 +209,9 @@ public partial class GameMode : Node3D
 
         // security
         var gBody = new NpcBody();
-        gBody.Init(Roster.GuardName, Archetype.Guard);
+        gBody.Init(CanonicalStaff.ExecutiveThreatName, Archetype.Guard);
         AddChild(gBody);
-        gBody.Position = WorldData.GuardPosts[0];
+        gBody.Position = CanonicalStaff.Find(CanonicalStaff.ExecutiveThreatName)?.SpawnPosition ?? WorldData.GuardPosts[0];
         Guard = NpcBrain.Create(gBody, "guard");
         Guard.PauseTimer = 2f;
         Npcs.Add(Guard);
@@ -259,6 +297,10 @@ public partial class GameMode : Node3D
         MaxSusEver = System.MathF.Max(MaxSusEver, MaxSuspicionValue);
 
         _shiftElapsed += dt * WorkdayTimeScale;
+        ProcessScheduledMeetings();
+        bool visiblyWorking = Player.PlayerSusActivity() <= 0f;
+        PlayerProfile.Tick(dt, visiblyWorking);
+        foreach (var npc in Npcs) npc.TickAttitude(dt);
         TickOfficeObjects(dt);
         VendingCooldown = System.MathF.Max(0f, VendingCooldown - dt);
         PhoneCooldown = System.MathF.Max(0f, PhoneCooldown - dt);
@@ -343,6 +385,7 @@ public partial class GameMode : Node3D
             Blood = Blood!,
             AlertTimer = AlertTimer,
             Evacuating = WorldEvents.Evacuating,
+            BossDifficulty = BossDifficulty,
             EvacPoint = WorldEvents.EvacPoint,
             BathroomPoint = new Vector3(-26.5f, 0f, -4f),
             CoffeePoint = new Vector3(25f, 0f, -19.2f),
@@ -358,8 +401,10 @@ public partial class GameMode : Node3D
             CanSee = CanSee,
             SetObjectState = (id, state, actor) => SetOfficeObjectState(id, state, false, actor),
             OnReportReachedGuard = OnReportReachedGuard,
-            OnPlayerCaught = () => EndGame(false, "Officer Briggs caught you red-handed. HR would like a word. Several words. In a basement."),
+            OnPlayerCaught = () => EndGame(false, "Officer Mr Purple caught you red-handed. HR would like a word. Several words. In a basement."),
         };
+        Social.Tick(Npcs, (float)dt, WorkdayBalance.WorkdayStartHour + _shiftElapsed / (Bal.ShiftSeconds / 8f));
+        TickMultiFloorRoutes((float)dt);
         AiDirector.Tick(Npcs, ctx, dt);
         if (Guard != null) AiDirector.GuardTick(Guard, ctx, dt);
         MaxSuspicionValue = AiDirector.Outputs.MaxSus;
@@ -530,6 +575,52 @@ public partial class GameMode : Node3D
 
     public void Toast(string msg, ToastKind kind = ToastKind.Info) => Hud?.Toast(msg, kind);
 
+    /// <summary>Schedules a department meeting from a computer; staff receive the same event through the normal stimulus queue.</summary>
+    public bool ScheduleDepartmentMeeting(string department, float hour, string room = "meeting_a", string source = "computer")
+    {
+        if (hour < WorkdayBalance.WorkdayStartHour || hour >= WorkdayBalance.WorkdayEndHour) return false;
+        if (!new[] { "Accounts", "IT", "HR", "Sales", "Operations", "Facilities", "Security" }.Contains(department)) return false;
+        _scheduledMeetings.Add(new ScheduledMeeting(department, hour, room, source));
+        Toast($"Meeting scheduled: {department} at {hour:0.0} in {room.Replace('_', ' ')}. Productivity has been weaponized.", ToastKind.Success);
+        return true;
+    }
+
+    private void ProcessScheduledMeetings()
+    {
+        if (_scheduledMeetings.Count == 0) return;
+        float hour = WorkdayBalance.WorkdayStartHour + _shiftElapsed / (Bal.ShiftSeconds / (WorkdayBalance.WorkdayEndHour - WorkdayBalance.WorkdayStartHour));
+        for (int i = _scheduledMeetings.Count - 1; i >= 0; i--)
+        {
+            var meeting = _scheduledMeetings[i];
+            if (hour < meeting.Hour || hour >= meeting.Hour + WorkdayBalance.MeetingDurationHours) continue;
+            _scheduledMeetings.RemoveAt(i);
+            var participants = Npcs.Where(n => n.Department == meeting.Department && n.Awake).ToArray();
+            foreach (var participant in participants)
+            {
+                ApplyDirective(participant, meeting.Room, 30f);
+                PublishStimulus(NpcStimulusKind.MeetingPressure, participant.Pos, 0.8f, false,
+                    $"{meeting.Department} meeting at {meeting.Room}.", radius: 24f, source: participant);
+            }
+            Toast($"{meeting.Department} department is filing into {meeting.Room.Replace('_', ' ')}. The desks are briefly yours.", ToastKind.Info);
+        }
+    }
+
+    public void ApplyPlayerAction(ActionProfile action, float visibility = 1f, float credibility = 1f)
+    {
+        PlayerProfile.Apply(action, visibility, credibility);
+        Toast($"COMPANY PROFILE — suspicion {PlayerProfile.SuspicionBand} / loyalty {PlayerProfile.LoyaltyBand} / work {PlayerProfile.WorkBand}", ToastKind.Info);
+    }
+
+    public void SetNpcAttitude(NpcBrain npc, NpcAttitudeKind kind, float strength, float duration, string source)
+    {
+        npc.SetAttitude(kind, strength, duration, source);
+    }
+
+    public void RecoverNpcAttitude(NpcBrain npc, float multiplier = 1f)
+    {
+        npc.RecoverAttitude(multiplier);
+    }
+
     private void TickOfficeObjects(float dt)
     {
         foreach (var officeObject in OfficeObjects)
@@ -596,11 +687,65 @@ public partial class GameMode : Node3D
         });
     }
 
+    private void TickMultiFloorRoutes(float dt)
+    {
+        foreach (var npc in Npcs)
+        {
+            if (!npc.IsChangingFloor || npc.WorkdayTarget == null) continue;
+            npc.TickFloorTransition(dt);
+        }
+    }
+
+    public bool TryMoveNpcToFloor(NpcBrain npc, string targetFloor, string? keycardId = null)
+    {
+        if (npc.FloorId.Equals(targetFloor, System.StringComparison.OrdinalIgnoreCase)) return true;
+        var link = Navigation.FindLink(npc.FloorId, targetFloor);
+        if (link == null || !Navigation.CanTraverse(npc.FloorId, targetFloor, keycardId))
+        {
+            PublishStimulus(NpcStimulusKind.AccessDenied, npc.Pos, ObjectBalance.AccessDeniedActivation, false,
+                $"{npc.NpcName} cannot access {targetFloor}.", radius: ObjectBalance.AccessDeniedRadius, source: npc,
+                preferredAction: NpcReactionAction.SeekHelp);
+            return false;
+        }
+        npc.BeginFloorTransition(targetFloor);
+        npc.SetReactionDestination(link.ToPosition, NpcReactionAction.GoToMeeting, 4f);
+        return true;
+    }
+
+    private void BindWorkshopAccess(WorkshopLevelData workshop)
+    {
+        var cards = workshop.AccessCards.ToDictionary(card => card.Id, card => card, System.StringComparer.OrdinalIgnoreCase);
+        foreach (var element in workshop.Elements)
+        {
+            if (string.IsNullOrEmpty(element.AccessCardId) || !cards.ContainsKey(element.AccessCardId)) continue;
+            var type = element.Type switch
+            {
+                "door" => OfficeObjectType.Door,
+                "terminal-desk" => OfficeObjectType.ServerTerminal,
+                "elevator" => OfficeObjectType.Elevator,
+                "stair" => OfficeObjectType.Stairwell,
+                _ => (OfficeObjectType?)null,
+            };
+            if (!type.HasValue) continue;
+            var id = $"workshop:{element.Id}";
+            if (OfficeObject(id) != null) continue;
+            var definition = OfficeObjectLibrary.Catalog.FirstOrDefault(candidate => candidate.Type == type.Value);
+            if (definition == null) continue;
+            var runtime = new OfficeObjectRuntime(id, definition, new Vector3(-28f + (element.X + element.Width / 2f) * 2f, 0f, -20f + (element.Y + element.Height / 2f) * 2f))
+            {
+                RequiredKeycard = element.AccessCardId,
+                State = OfficeObjectState.KeycardRequired,
+            };
+            OfficeObjects.Add(runtime);
+        }
+    }
+
     public bool TryAccessOfficeObject(string id, string? keycardId, NpcBrain? actor = null)
     {
         var officeObject = OfficeObject(id);
         if (officeObject == null) return false;
         if (officeObject.TryUse(keycardId)) return true;
+        ApplyPlayerAction(ConsequenceActions.RestrictedAccess, 0.8f, 1f);
         PublishStimulus(NpcStimulusKind.AccessDenied, officeObject.Position, ObjectBalance.AccessDeniedActivation,
             actor == null, $"Access denied at {officeObject.Definition.DisplayName}.",
             objectId: officeObject.Id, objectType: officeObject.Definition.Type,
@@ -670,7 +815,7 @@ public partial class GameMode : Node3D
         if (source == null) return;
         var original = source.Memories.Last(m => !m.Shared && m.Confidence > 20f);
         original.Shared = true;
-        string hedge = original.Confidence > 70f ? "Susan says" : "Susan vaguely remembers";
+        string hedge = original.Confidence > 70f ? "Pam says" : "Pam vaguely remembers";
         string narrative = $"{hedge} {original.Subject} was involved in {original.Incident.ToLowerInvariant()} near {WorldData.RoomAt(original.Location.X, original.Location.Z)}.";
         foreach (var listener in Npcs)
         {
@@ -712,6 +857,7 @@ public partial class GameMode : Node3D
     /// <summary>Files a target-specific anonymous HR allegation and seeds staff memories.</summary>
     public void FileAnonymousReport(string suspect, string allegation, string details)
     {
+        ApplyPlayerAction(ConsequenceActions.FramedReport, 0.9f, PlayerProfile.CompanyTrust / 100f + 0.5f);
         var target = Npcs.FirstOrDefault(n => n.NpcName == suspect && n != Guard);
         if (target == null) return;
         CaseSuspectName = suspect;
@@ -746,6 +892,14 @@ public partial class GameMode : Node3D
                     Age = 0f,
                 });
             }
+        }
+        var reportedTarget = Npcs.Find(n => n.NpcName == suspect);
+        if (reportedTarget != null)
+        {
+            reportedTarget.SetAttitude(NpcAttitudeKind.Resentful, 0.85f, 360f, "framed report");
+            foreach (var friend in Npcs)
+                if (friend != reportedTarget && friend.Pos.DistanceTo(reportedTarget.Pos) < 12f)
+                    friend.SetAttitude(NpcAttitudeKind.Suspicious, 0.35f, 180f, "coworker reported");
         }
         Toast($"ANONYMOUS REPORT FILED. {suspect} is now the subject of an HR case: {allegation}.", ToastKind.Chaos);
         Toast("The office has received a version of events. Versions are powerful.", ToastKind.Warn);
@@ -979,6 +1133,7 @@ public partial class GameMode : Node3D
         if (!Blood!.Contains(splat)) return;
         Blood.Remove(splat);
         Stats.Cleans++;
+        ApplyPlayerAction(ConsequenceActions.Cleanup, 0.7f, 1f);
         Synth?.Pickup();
         Toast("Blood mopped. Just a janitor doing janitor things. Nothing to see here.", ToastKind.Success);
 
@@ -997,6 +1152,7 @@ public partial class GameMode : Node3D
     private void OnReportReachedGuard(NpcBrain reporter)
     {
         reporter.CalmDown();
+        ApplyPlayerAction(ConsequenceActions.HonestReport, 1f, PlayerProfile.CompanyTrust / 100f + 0.5f);
         Stats.Reports++;
         CaseEvidence = System.MathF.Min(100f, CaseEvidence + 25f);
         if (!CaseActive && CaseEvidence >= 35f) { CaseActive = true; Toast("HR CASE OPENED — a witness went on record. Shred the tapes.", ToastKind.Chaos); }
@@ -1007,9 +1163,9 @@ public partial class GameMode : Node3D
             Guard.LastSeenPlayer = Player.FeetPos;
             Guard.LostSightTimer = 0f;
         }
-        Toast("Officer Briggs has been informed. He is walking over with intent.", ToastKind.Warn);
+        Toast("Officer Mr Purple has been informed. He is walking over with intent.", ToastKind.Warn);
         RecordIncident("You", "a witness report", reporter.Pos,
-            $"{reporter.NpcName} reported suspicious activity to Briggs.");
+            $"{reporter.NpcName} reported suspicious activity to Mr Purple.");
         Synth?.Alarm();
     }
 
@@ -1018,6 +1174,7 @@ public partial class GameMode : Node3D
     {
         if (victim.State == NpcState.Out || Player == null) return;
         bool wasAsleep = victim.State == NpcState.Seated;
+        ApplyPlayerAction(ConsequenceActions.MajorCrime, 1f, 1f);
         FlashCrime();
         victim.KnockOut(flopDir);
         Stats.Bonks++;
@@ -1093,6 +1250,7 @@ public partial class GameMode : Node3D
         string key = ObjKey(o);
         if (_doneObjectives.Contains(key)) return;
         _doneObjectives.Add(key);
+        ApplyPlayerAction(ConsequenceActions.VisibleWork, 0.8f, 1f);
         Synth?.Success();
         Toast($"OBJECTIVE COMPLETE — {ObjectiveLabel(o)}", ToastKind.Success);
         if (Active.Objectives.All(ObjectiveDone))
@@ -1335,6 +1493,7 @@ public partial class GameMode : Node3D
 
     public void HeatFish()
     {
+        ApplyPlayerAction(ConsequenceActions.MajorCrime, 0.7f, 1f);
         FlashCrime();
         WorldEvents.StinkActive = true;
         WorldEvents.StinkPos = new Vector3(22f, 0f, -15f);
@@ -1347,6 +1506,7 @@ public partial class GameMode : Node3D
 
     public void PullFireAlarm()
     {
+        ApplyPlayerAction(ConsequenceActions.MajorCrime, 0.7f, 1f);
         FlashCrime();
         WorldEvents.Evacuating = true;
         WorldEvents.EvacPoint = new Vector3(0f, 0f, 17f);

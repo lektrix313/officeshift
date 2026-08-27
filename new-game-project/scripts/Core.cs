@@ -292,26 +292,36 @@ public static class Bal
     public const int MaxSplats = 90;
 }
 
-/// <summary>Coworker roster ported verbatim from game.ts COWORKERS.</summary>
+/// <summary>Legacy compatibility shape. Runtime spawning uses CanonicalStaff.Assignments.</summary>
 public sealed record CoworkerDef(string Name, Archetype Arch, float X, float Z, string Zone);
 
 public static class Roster
 {
+    // Compatibility projection for old mission/debug callers; never use for spawning.
     public static readonly CoworkerDef[] Coworkers =
     {
-        new("Keith",    Archetype.Snoop,    0f,   -2f, "snoop"),
-        new("Susan",    Archetype.Gossip,   10f,   4f, "gossip"),
-        new("Dave",     Archetype.Slob,   -16.2f,  0f, "drone"),
-        new("Tom",      Archetype.Grifter, 24f,  11f, "grifter"),
-        new("Greg",     Archetype.Drone,  -10f,    4f, "drone"),
-        new("Janet",    Archetype.Drone,    5f,   -9f, "drone"),
-        new("Priya",    Archetype.Drone,  -20f,   -9f, "drone"),
-        new("Margaret", Archetype.Drone,   16f,  -12f, "drone"),
-        new("Linda",    Archetype.Drone,    0f,   11f, "drone"),
-        new("Barry",    Archetype.Drone,  -26f,   -5f, "gossip"),
+        new("Bob",          Archetype.Drone,   -5f,  -1f, "drone"),
+        new("Sleepy Steve", Archetype.Slob,    -10f,  4f, "drone"),
+        new("Pam",          Archetype.Gossip,   10f,  4f, "gossip"),
+        new("Mr Purple",    Archetype.Snoop,     0f, 11f, "snoop"),
+        new("Fran",         Archetype.Drone,     5f, -1f, "drone"),
+        new("Chad",         Archetype.Grifter,  10f,  1f, "grifter"),
+        new("Rita",         Archetype.Gossip,    0f, 17f, "gossip"),
+        new("Mailroom Mike",Archetype.Drone,   -20f,  4f, "drone"),
+        new("Dave",         Archetype.Drone,   -16f,  1f, "drone"),
+        new("Liz",          Archetype.Gossip,    15f, -5f, "gossip"),
+        new("Nervous Ned",  Archetype.Snoop,    -5f,  8f, "snoop"),
+        new("Manager Mo",   Archetype.Drone,     5f,  8f, "drone"),
+        new("Jen",          Archetype.Drone,     5f,  4f, "drone"),
+        new("Data Dave",    Archetype.Snoop,   -10f, -1f, "snoop"),
+        new("Boring Bill",  Archetype.Drone,    15f,  4f, "drone"),
+        new("Boss Barbara", Archetype.Snoop,     0f,  4f, "snoop"),
+        new("Joe",          Archetype.Drone,    26f, 11f, "drone"),
+        new("Kevin",        Archetype.Drone,    20f, -5f, "drone"),
+        new("Old Tom",      Archetype.Grifter, -20f, 11f, "grifter"),
     };
 
-    public const string GuardName = "Briggs";
+    public const string GuardName = CanonicalStaff.ExecutiveThreatName;
 }
 
 public static class Flavor

@@ -1,5 +1,6 @@
 using Godot;
 using System.Collections.Generic;
+using System.Linq;
 
 /// <summary>
 /// Runtime world API attached to scenes/world.tscn root by the build-time
@@ -18,6 +19,41 @@ public partial class World : Node3D
     public Vector3 SlobDeskPos => WorldData.SlobDeskPos;
 
     private readonly Dictionary<string, Vector3[]> _waypoints = new();
+    private bool _workshopGeometryLoaded;
+
+    public void ApplyWorkshopGeometry(WorkshopLevelData workshop, float worldScale = 2f, float originX = -28f, float originZ = -20f)
+    {
+        if (_workshopGeometryLoaded) return;
+        _workshopGeometryLoaded = true;
+        foreach (var element in workshop.Elements)
+        {
+            float x = originX + (element.X + element.Width / 2f) * worldScale;
+            float z = originZ + (element.Y + element.Height / 2f) * worldScale;
+            float width = MathF.Max(.25f, element.Width * worldScale);
+            float depth = MathF.Max(.25f, element.Height * worldScale);
+            bool wall = element.Type is "wall" or "glass-wall" or "office" or "cubicle";
+            bool solid = element.Gameplay && element.Type is not "plant";
+            bool blocksVision = wall || element.Type is "door";
+            float height = element.Type is "wall" or "glass-wall" ? WorldData.WallHeight : element.Type is "office" or "cubicle" ? 1.4f : .8f;
+            if (element.Type == "door") { width = .35f; depth = MathF.Max(1f, depth); }
+            AddBlockoutBox(x, height / 2f, z, width, height, depth, element.Type == "glass-wall" ? Color.FromHtml("79b9cc") : wall ? Color.FromHtml("d8d4cc") : Color.FromHtml("8a7860"), solid, element.Type == "glass-wall");
+            if (solid) AddRuntimeCollider(x, z, width, depth, blocksVision);
+        }
+        AddWorkshopWaypoints(workshop.Waypoints, worldScale, originX, originZ);
+    }
+
+    private void AddRuntimeCollider(float x, float z, float width, float depth, bool blocksVision)
+    {
+        var box = new Aabb2(x - width / 2f, z - depth / 2f, x + width / 2f, z + depth / 2f);
+        Colliders.Add(box);
+        if (blocksVision) VisionBlockers.Add(box);
+    }
+
+    public void AddWorkshopWaypoints(IEnumerable<WorkshopWaypointData> waypoints, float worldScale = 2f, float originX = -28f, float originZ = -20f)
+    {
+        foreach (var group in waypoints.GroupBy(waypoint => waypoint.Id, StringComparer.OrdinalIgnoreCase))
+            _waypoints[group.Key] = group.Select(waypoint => new Vector3(originX + waypoint.X * worldScale, 0f, originZ + waypoint.Y * worldScale)).ToArray();
+    }
 
     public override void _Ready()
     {
@@ -25,6 +61,11 @@ public partial class World : Node3D
         // artifact, patch only legacy scenes at runtime; regenerated scenes carry a marker.
         if (GetNodeOrNull<Node>("LayoutBlockoutV13") == null)
             ApplyLegacyLayoutFallback();
+
+        // Imported Workshop geometry is applied before the static fallback index is built.
+        var workshopPath = Godot.FileAccess.FileExists("user://workshop.json") ? "user://workshop.json" : Godot.FileAccess.FileExists("res://workshop.json") ? "res://workshop.json" : "";
+        var workshop = string.IsNullOrEmpty(workshopPath) ? null : WorkshopLevelData.Load(workshopPath, out _);
+        if (workshop?.HasGeometry == true) ApplyWorkshopGeometry(workshop);
 
         // walls: collide + block vision
         foreach (var w in WorldData.Walls)
