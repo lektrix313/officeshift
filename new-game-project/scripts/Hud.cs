@@ -28,6 +28,10 @@ public sealed class HudSnapshot
     public bool CaseActive;
     public float CasePct;
     public string Floor = "floor-1";
+    public int KeycardCount;
+    public string? LastKeycardPickup;
+    /// <summary>-1 when idle; 0..1 during floor-transition fade.</summary>
+    public float FadeProgress = -1f;
     public List<(string Label, bool Done)> Objectives { get; } = new();
     public (int Bonks, int Hides, int Reports, int Disguises, int Cleans) Stats;
 }
@@ -49,6 +53,9 @@ public partial class Hud : CanvasLayer
 
     private Label _clockLabel = null!;
     private Label _floorLabel = null!;
+    private ColorRect _fadeOverlay = null!;
+    private float _fadeAlpha;
+    private float _fadeTarget;
     private Label _susGlyph = null!;
     private ProgressBar _susBar = null!;
     private Label _susPct = null!;
@@ -86,6 +93,16 @@ public partial class Hud : CanvasLayer
         _floorLabel = MakeLabel(root, "", 14, AccentCyan);
         Anchor(_floorLabel, Control.LayoutPreset.CenterTop);
         _floorLabel.OffsetTop = 46;
+
+        // fade overlay for floor transitions
+        _fadeOverlay = new ColorRect
+        {
+            Color = new Color(0f, 0f, 0f, 0f),
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            Visible = false,
+        };
+        _fadeOverlay.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        root.AddChild(_fadeOverlay);
 
         // suspicion meter top-left
         var susPanel = Panel(root, new Vector2(16, 10), new Vector2(280, 58));
@@ -184,6 +201,27 @@ public partial class Hud : CanvasLayer
         _floorLabel.Text = $"▲ {floorDisplay}";
         _floorLabel.Visible = s.Started && !s.Over;
 
+        // fade overlay for floor transitions
+        if (s.FadeProgress >= 0f)
+        {
+            _fadeOverlay.Visible = true;
+            _fadeTarget = s.FadeProgress;
+        }
+        else if (_fadeOverlay.Visible)
+        {
+            _fadeTarget = 0f;
+        }
+        if (_fadeOverlay.Visible)
+        {
+            _fadeAlpha += (_fadeTarget - _fadeAlpha) * 0.15f;
+            if (_fadeAlpha < 0.01f && _fadeTarget <= 0f)
+            {
+                _fadeAlpha = 0f;
+                _fadeOverlay.Visible = false;
+            }
+            _fadeOverlay.Color = new Color(0f, 0f, 0f, _fadeAlpha);
+        }
+
         float t = Util.Clamp(s.MaxSuspicion / 100f, 0f, 1f);
         _susBar.Value = t;
         _susPct.Text = $"{(int)s.MaxSuspicion}%";
@@ -199,6 +237,7 @@ public partial class Hud : CanvasLayer
         if (s.Crouching) bits.Add("crouching");
         if (s.HasMop) bits.Add("[mop]");
         if (s.HasBlueprint) bits.Add("[blueprints]");
+        if (s.KeycardCount > 0) bits.Add($"[keycards x{s.KeycardCount}]");
         if (s.BeingWatched) bits.Add("*being watched*");
         if (s.CaseActive)
         {

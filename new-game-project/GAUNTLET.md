@@ -416,3 +416,22 @@ fun-per-line-of-code. This file is the loop's persistent state.
 - [x] C# build: 0 errors, 0 warnings
 - [x] Frontend build: passed
 - [ ] Godot runtime capture remains pending until the local Mono assembly startup blocker is resolved
+
+### CYCLE 32 — keycard inventory, screen fade, NPC floor beats (IMPLEMENTED)
+- [x] Created `KeycardInventory` class with add/remove/has/best-match/can-access methods
+- [x] Created `KeycardCatalog` with 9 canonical keycards: janitorial, gary-level-3, it-systems, hr-confidential, executive-override, maintenance, procurement, reception-visitor, security-camera
+- [x] Created `NpcKeycardDrops` mapping each of 20 staff members to the keycards they carry
+- [x] Player looting a knocked-out body now transfers their keycards to the player inventory
+- [x] Floor transition access check uses `Keycards.BestMatch()` instead of null placeholder
+- [x] HUD shows `[keycards xN]` in status bar when player holds keycards
+- [x] Prompt shows specific keycard name when locked (`🔒 Need HR Confidential Access for Floor 2`)
+- [x] Executive override keycard serves as master key for most access checks
+- [x] Added screen fade overlay for floor transitions (ColorRect with alpha interpolation)
+- [x] Added `FadeProgress` to HudSnapshot driven by player transition timer
+- [x] Added `FloorId` field to `WorkdayBeat` for floor-aware NPC routines
+- [x] Mr Purple patrols both floors as sentinel; Boss Barbara visits executive floor; Joe visits floor-2 for maintenance; Bob/Fran visit floor-2 for finance work
+- [x] NPC `UpdateWorkday` now triggers `TryMoveNpcToFloor` when beat specifies different floor
+- [x] Added `GameMode` reference to `AiContext` for NPC-to-GameMode floor routing
+- [x] C# build: 0 errors, 0 warnings
+- [x] Frontend build: passed
+- [ ] Godot runtime capture remains pending until the local Mono assembly startup blocker is resolved

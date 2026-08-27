@@ -25,6 +25,9 @@ public partial class PlayerController : CharacterBody3D
     public float FloorTransitionTimer { get; private set; }
     public string? TargetFloorId { get; private set; }
     public Vector3 TransitionExitPosition { get; private set; }
+
+    // ---- keycard inventory ----
+    public KeycardInventory Keycards { get; } = new();
     public NpcBrain? Carrying { get; set; }
     public PropItem? HeldProp { get; set; }
     public HeldItem HeldItem { get; set; }
@@ -448,12 +451,13 @@ public partial class PlayerController : CharacterBody3D
         var floorLink = FindNearestFloorLink();
         if (floorLink != null)
         {
-            if (!Mode.Navigation.CanTraverse(FloorId, floorLink.ToFloor, PlayerKeycardId()))
+            string? matchedCard = Keycards.BestMatch(floorLink.RequiredKeycard);
+            if (floorLink.RequiredKeycard != null && matchedCard == null)
             {
-                Mode.Toast($"Access denied. You need a keycard for {floorLink.ToFloor}.", ToastKind.Warn);
+                Mode.Toast($"Access denied. You need the {KeycardCatalog.Find(floorLink.RequiredKeycard)?.DisplayName ?? floorLink.RequiredKeycard} keycard.", ToastKind.Warn);
                 Mode.ApplyPlayerAction(ConsequenceActions.RestrictedAccess, 0.6f, 1f);
                 Mode.PublishStimulus(NpcStimulusKind.AccessDenied, FeetPos, ObjectBalance.AccessDeniedActivation, true,
-                    $"Player denied access to {floorLink.ToFloor}.", radius: ObjectBalance.AccessDeniedRadius);
+                    $"Player denied access to {FriendlyFloorName(floorLink.ToFloor)}.", radius: ObjectBalance.AccessDeniedRadius);
                 return;
             }
             TargetFloorId = floorLink.ToFloor;
@@ -583,15 +587,34 @@ public partial class PlayerController : CharacterBody3D
                 return;
             }
         }
-        // 5. steal clothes from a body
+        // 5. steal clothes + keycards from a body
         var body = NearestBody();
         if (body != null && !body.Looted)
         {
             body.Looted = true;
             DisguiseOf = body.NpcName;
             Mode.Stats.Disguises++;
+            // pick up their keycards
+            var drops = NpcKeycardDrops.GetDrops(body.NpcName);
+            int cardsFound = 0;
+            foreach (var card in drops)
+            {
+                if (Keycards.Add(card))
+                {
+                    cardsFound++;
+                    var def = KeycardCatalog.Find(card);
+                    Mode.Toast($"Keycard found: {def?.DisplayName ?? card}", ToastKind.Success);
+                }
+            }
             SynthPickup();
-            Mode.Toast($"You are now \"definitely {body.NpcName}\". Shirt's a bit tight.", ToastKind.Success);
+            if (cardsFound > 0)
+            {
+                Mode.Toast($"You are now \"definitely {body.NpcName}\". Found {cardsFound} keycard{(cardsFound > 1 ? "s" : "")}.", ToastKind.Success);
+            }
+            else
+            {
+                Mode.Toast($"You are now \"definitely {body.NpcName}\". Shirt's a bit tight. No keycards.", ToastKind.Info);
+            }
             return;
         }
         // 6. grab the mop from the supply closet
@@ -648,8 +671,8 @@ public partial class PlayerController : CharacterBody3D
         return best;
     }
 
-    /// <summary>Player keycard ID. Currently returns null; wired when keycards are implemented.</summary>
-    private string? PlayerKeycardId() => null;
+    /// <summary>Returns the best keycard the player owns for the given required ID, or null.</summary>
+    private string? PlayerKeycardId() => null; // null means 'no specific requirement'; Keycards.BestMatch is used at call sites
 
     private static string FriendlyFloorName(string id)
     {
@@ -839,10 +862,10 @@ public partial class PlayerController : CharacterBody3D
         var fl = FindNearestFloorLink();
         if (fl != null)
         {
-            bool canGo = Mode.Navigation.CanTraverse(FloorId, fl.ToFloor, PlayerKeycardId());
+            bool canGo = fl.RequiredKeycard == null || Keycards.CanAccess(fl.RequiredKeycard);
             return canGo
                 ? $"E — {fl.Type} to {FriendlyFloorName(fl.ToFloor)}"
-                : $"🔒 Need keycard for {FriendlyFloorName(fl.ToFloor)}";
+                : $"🔒 Need {KeycardCatalog.Find(fl.RequiredKeycard!)?.DisplayName ?? "keycard"} for {FriendlyFloorName(fl.ToFloor)}";
         }
         var printer = FindSpot("printer");
         if (printer != null && FeetPos.DistanceTo(printer.Pos) < Bal.InteractRange + 0.5f)

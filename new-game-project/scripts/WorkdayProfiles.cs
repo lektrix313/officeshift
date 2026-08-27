@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 
 public enum WorkdayMovementStyle { DeskAnchor, Fidgeter, SocialButterfly, ErrandRunner, SnackSeeker, CoffeeSeeker, Sentinel }
-public sealed record WorkdayBeat(string Id, float StartHour, float EndHour, WorkdayState State, string Destination, bool DepartmentEvent = false);
+public sealed record WorkdayBeat(string Id, float StartHour, float EndHour, WorkdayState State, string Destination, bool DepartmentEvent = false, string? FloorId = null);
 public sealed record WorkerProfile(string Name, string Job, string Department, WorkdayMovementStyle Movement, string HomeZone, float DeskShare, float SocialDrive, float BathroomNeed, float SnackNeed, float CoffeeNeed, IReadOnlyList<WorkdayBeat> Beats);
 public enum BossDifficulty { Easy, Standard, Hard }
 
@@ -38,7 +38,7 @@ public static class WorkdayBalance
 
 public static class CanonicalWorkdayProfiles
 {
-    private static WorkdayBeat Beat(string id, float start, float end, WorkdayState state, string destination, bool group = false) => new(id, start, end, state, destination, group);
+    private static WorkdayBeat Beat(string id, float start, float end, WorkdayState state, string destination, bool group = false, string? floor = null) => new(id, start, end, state, destination, group, floor);
 
     public static WorkerProfile For(string name)
     {
@@ -54,11 +54,21 @@ public static class CanonicalWorkdayProfiles
         var beats = new List<WorkdayBeat>();
         if (p.Name == "Mr Purple")
         {
-            beats.Add(Beat("executive-round", 9.5f, 10.2f, WorkdayState.WalkingThinking, "executive"));
-            beats.Add(Beat("executive-desk", 10.2f, 10.8f, WorkdayState.WorkingAtDesk, "desk"));
-            beats.Add(Beat("executive-round", 10.8f, 12.2f, WorkdayState.WalkingThinking, "floor"));
-            beats.Add(Beat("boardroom", 13f, 14f, WorkdayState.Meeting, "meeting_a", true));
-            beats.Add(Beat("executive-round", 14f, 16.5f, WorkdayState.WalkingThinking, "floor"));
+            // Sentinel: roams both floors, checks in on staff
+            beats.Add(Beat("executive-round", 9.5f, 10.2f, WorkdayState.WalkingThinking, "executive", floor: "floor-2"));
+            beats.Add(Beat("executive-desk", 10.2f, 10.8f, WorkdayState.WorkingAtDesk, "desk", floor: "floor-2"));
+            beats.Add(Beat("floor-check", 10.8f, 12.2f, WorkdayState.WalkingThinking, "floor", floor: "floor-1"));
+            beats.Add(Beat("boardroom", 13f, 14f, WorkdayState.Meeting, "meeting_a", true, floor: "floor-2"));
+            beats.Add(Beat("floor-patrol", 14f, 16.5f, WorkdayState.WalkingThinking, "floor", floor: "floor-1"));
+            return beats;
+        }
+        // Executive and senior staff occasionally visit floor-2
+        if (p.Name == "Boss Barbara")
+        {
+            beats.Add(Beat("morning-work", 9.2f, 10.5f, WorkdayState.WorkingAtDesk, "desk"));
+            beats.Add(Beat("exec-visit", 10.5f, 11.3f, WorkdayState.WalkingThinking, "executive", floor: "floor-2"));
+            beats.Add(Beat("lunch", 12f, 12.5f, WorkdayState.OnBreak, "coffee"));
+            beats.Add(Beat("afternoon-work", 13f, 16.2f, WorkdayState.WorkingAtDesk, "desk"));
             return beats;
         }
         if (p.Movement == WorkdayMovementStyle.DeskAnchor)
@@ -94,6 +104,9 @@ public static class CanonicalWorkdayProfiles
             beats.Add(Beat("round", 10.2f, 11.3f, WorkdayState.WalkingThinking, p.Department.ToLowerInvariant()));
             beats.Add(Beat("lunch", 12f, 12.5f, WorkdayState.OnBreak, "coffee"));
             beats.Add(Beat("afternoon-round", 14f, 15.3f, WorkdayState.WalkingThinking, p.Department.ToLowerInvariant()));
+            // Joe (janitor) visits floor-2 for maintenance
+            if (p.Name == "Joe")
+                beats.Add(Beat("maintenance-floor2", 15.3f, 16f, WorkdayState.WalkingThinking, "floor", floor: "floor-2"));
         }
         return beats;
     }

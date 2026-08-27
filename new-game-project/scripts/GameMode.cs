@@ -416,6 +416,7 @@ public partial class GameMode : Node3D
             SetObjectState = (id, state, actor) => SetOfficeObjectState(id, state, false, actor),
             OnReportReachedGuard = OnReportReachedGuard,
             OnPlayerCaught = () => EndGame(false, "Officer Mr Purple caught you red-handed. HR would like a word. Several words. In a basement."),
+            GameMode = this,
         };
         Social.Tick(Npcs, (float)dt, WorkdayBalance.WorkdayStartHour + _shiftElapsed / (Bal.ShiftSeconds / 8f));
         TickMultiFloorRoutes((float)dt);
@@ -1639,6 +1640,8 @@ public partial class GameMode : Node3D
             CaseActive = CaseActive,
             CasePct = CaseEvidence,
             Floor = Player?.FloorId ?? "floor-1",
+            KeycardCount = Player?.Keycards.Count ?? 0,
+            FadeProgress = Player != null && Player.IsChangingFloor ? Util.Clamp(1f - Player.FloorTransitionTimer / 2.5f, 0f, 1f) : -1f,
         };
         bool channeling = Player != null && Player.ChannelProgressFraction >= 0;
         foreach (var o in Active.Objectives)

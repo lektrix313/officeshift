@@ -40,6 +40,7 @@ public sealed class AiContext
     public Action<NpcBrain>? OnReportReachedGuard;
     public Action? OnPlayerCaught;
     public Action<string, OfficeObjectState, NpcBrain?>? SetObjectState;
+    public GameMode? GameMode;
 }
 
 public partial class NpcBrain : Node
@@ -416,6 +417,11 @@ public partial class NpcBrain : Node
             MoveTarget = null;
             PauseTimer = 0f;
             Body.SetWorkdayState(next);
+        }
+        // Floor transition: if a beat specifies a different floor, initiate elevator/stair travel
+        if (authoredBeat?.FloorId != null && !authoredBeat.FloorId.Equals(FloorId, StringComparison.OrdinalIgnoreCase) && !IsChangingFloor)
+        {
+            ctx.GameMode?.TryMoveNpcToFloor(this, authoredBeat.FloorId);
         }
         WorkdayTarget = authoredBeat != null
             ? AuthoredWorkdayPoint(authoredBeat, ctx)
