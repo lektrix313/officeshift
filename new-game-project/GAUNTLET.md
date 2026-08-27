@@ -513,3 +513,12 @@ fun-per-line-of-code. This file is the loop's persistent state.
 - [x] Collision generated for solid gameplay elements
 - [x] Wired into World.ApplyWorkshopGeometry replacing generic box renderer
 - [x] C# build: 0 errors, 0 warnings
+
+### CYCLE 38 — Office lighting and room atmosphere (IMPLEMENTED)
+- [x] Rooms now have ceiling planes with per-type coloring (white/cream/server-gray/executive-purple)
+- [x] Ceiling light fixtures (fluorescent strips) with emissive glow
+- [x] Larger rooms get double light strips
+- [x] Per-room OmniLight3D with type-specific tint (warm break room, cool server, soft executive)
+- [x] Floor accent strips for wet rooms (bathroom, break room)
+- [x] Door panels now have raised inset detail and number plates
+- [x] C# build: 0 errors, 0 warnings

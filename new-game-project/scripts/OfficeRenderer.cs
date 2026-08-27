@@ -131,10 +131,14 @@ public static class OfficeRenderer
         AddBox(p, cx + w / 2f - DoorFrameW / 2f, DoorH / 2f, cz, DoorFrameW, DoorH, d + 0.1f, "596575", solid: false);
         // Door frame top
         AddBox(p, cx, DoorH - 0.06f, cz, w + 0.1f, 0.12f, d + 0.1f, "596575", solid: false);
-        // Door panel (slightly ajar feel)
+        // Door panel
         AddBox(p, cx, DoorH / 2f - 0.1f, cz, w * 0.85f, DoorH - 0.2f, 0.06f, "8a7860", solid: true);
+        // Door panel inset (raised panel detail)
+        AddBox(p, cx, DoorH / 2f - 0.1f, cz + 0.04f, w * 0.6f, (DoorH - 0.2f) * 0.4f, 0.02f, "9a8870", solid: false);
         // Handle
         AddBox(p, cx + w * 0.3f, 1.0f, cz + d / 2f + 0.04f, 0.06f, 0.12f, 0.06f, "c0a840", solid: false);
+        // Door number plate
+        AddBox(p, cx, 2.0f, cz + d / 2f + 0.04f, 0.2f, 0.1f, 0.02f, "e0d8c8", solid: false);
     }
 
     private static void RenderKeycardDoor(Node3D p, float cx, float cz, float w, float d, WorkshopElementData el)
@@ -180,10 +184,55 @@ public static class OfficeRenderer
             "executive" => "a898b0",
             _ => "c0b8b0",
         };
-        // Floor plane
+        string ceilingColor = kind switch
+        {
+            "server" => "606870",
+            "executive" => "d0c8d8",
+            _ => "e8e4dc",
+        };
+        float lightIntensity = kind switch
+        {
+            "server" => 0.6f,
+            "executive" => 0.8f,
+            "break" => 1.0f,
+            "bathroom" => 0.7f,
+            _ => 1.0f,
+        };
+        Color lightTint = kind switch
+        {
+            "break" => Color.FromHtml("fff0d0"),
+            "server" => Color.FromHtml("d0e0ff"),
+            "executive" => Color.FromHtml("ffe8c8"),
+            "meeting" => Color.FromHtml("f0e8ff"),
+            "bathroom" => Color.FromHtml("e8f0ff"),
+            _ => Color.FromHtml("fff8f0"),
+        };
+
+        // Floor plane (carpet/tile)
         AddBox(p, cx, -0.02f, cz, w, 0.04f, d, floorColor, solid: false);
-        // Ceiling light strip
-        AddBox(p, cx, WallH - 0.04f, cz, w * 0.6f, CeilingLightH, d * 0.15f, "f0e8d0", solid: false, emissive: true);
+        // Floor accent strip (tile pattern for wet rooms)
+        if (kind is "bathroom" or "break")
+            AddBox(p, cx, -0.01f, cz, w - 0.2f, 0.02f, d - 0.2f, "d8d0c0", solid: false);
+
+        // Ceiling plane
+        AddBox(p, cx, WallH - 0.02f, cz, w, 0.04f, d, ceilingColor, solid: false);
+
+        // Ceiling light fixture (fluorescent strip)
+        AddBox(p, cx, WallH - 0.06f, cz, w * 0.5f, 0.04f, d * 0.12f, "f0e8d0", solid: false, emissive: true);
+        // Second light strip for larger rooms
+        if (w > 6f || d > 6f)
+            AddBox(p, cx, WallH - 0.06f, cz + d * 0.25f, w * 0.5f, 0.04f, d * 0.12f, "f0e8d0", solid: false, emissive: true);
+
+        // Room-tinted OmniLight3D for atmosphere
+        var light = new OmniLight3D
+        {
+            Position = new Vector3(cx, WallH - 0.3f, cz),
+            LightColor = lightTint,
+            LightEnergy = lightIntensity,
+            OmniRange = MathF.Max(w, d) * 0.8f,
+            OmniAttenuation = 1.2f,
+        };
+        p.AddChild(light);
     }
 
     // ════════════════════════════════════════════════════════════
