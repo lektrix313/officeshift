@@ -464,3 +464,19 @@ fun-per-line-of-code. This file is the loop's persistent state.
 - [x] Updated FindWorkdayClip token matching for strafe and turn animations
 - [x] AnimationLibrary-based injection (Godot 4 compatible)
 - [x] C# build: 0 errors, 0 warnings
+
+### CYCLE 36 — Level designer expansion: 46 props, 10 access cards, full office layout (IMPLEMENTED)
+- [x] Expanded ElementType from 14 to 46 types across 7 categories
+- [x] Structure: wall, glass-wall, glass-partition, door, keycard-door, window, column
+- [x] Rooms: office, cubicle, reception, meeting-room, server-room, break-room, bathroom, storage-closet, executive-office
+- [x] Furniture: desk, terminal-desk, chair, printer, meeting-table, whiteboard, bookshelf, filing-cabinet, sofa, lounge-chair, coffee-table, server-rack, safe, shredder, scanner, monitor, projector, tv-screen
+- [x] Breakroom: water-cooler, coffee-machine, vending-machine
+- [x] Vertical: stair, elevator
+- [x] Dressing: plant, prop, clock, fire-extinguisher, coat-rack, umbrella-stand
+- [x] 10 access cards covering all departments (janitor, IT, accounts, HR, security, executive, reception, procurement, legal, master)
+- [x] 25 room name labels for full office variety
+- [x] Starter layout includes server room, HR suite, CEO office, cubicle farm, meeting room, break room
+- [x] Full CSS color system for all 46 element types
+- [x] Category tabs now show 7 groups: structure, rooms, furniture, tech, breakroom, vertical, dressing
+- [x] Frontend build: 0 errors
+- [x] C# build: 0 errors, 0 warnings

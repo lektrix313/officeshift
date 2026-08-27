@@ -1,47 +1,60 @@
 import { useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, CSSProperties, DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from 'react';
 import {
+  Armchair,
+  BookOpen,
   Box,
   ChevronLeft,
   ChevronRight,
+  Clock,
+  Coffee,
   Download,
+  Droplets,
   Eye,
   FileJson,
   Grid3X3,
   KeyRound,
   Layers3,
   LockKeyhole,
+  Monitor,
   MousePointer2,
+  Package,
   Paintbrush,
   Play,
   Plus,
   RotateCcw,
   Save,
+  ScanLine,
+  Server,
+  Shield,
+  Shredder,
   Sparkles,
+  Table,
   Trash2,
   Upload,
   Users,
   WandSparkles,
+  Zap,
 } from 'lucide-react';
 import './LevelDesigner.css';
 
 type ElementType =
-  | 'wall'
-  | 'glass-wall'
-  | 'door'
-  | 'office'
-  | 'cubicle'
-  | 'reception'
-  | 'desk'
-  | 'terminal-desk'
-  | 'chair'
-  | 'printer'
-  | 'stair'
-  | 'elevator'
-  | 'plant'
-  | 'prop';
+  // Structure
+  | 'wall' | 'glass-wall' | 'glass-partition' | 'door' | 'keycard-door' | 'window' | 'column'
+  // Rooms
+  | 'office' | 'cubicle' | 'reception' | 'meeting-room' | 'server-room' | 'break-room'
+  | 'bathroom' | 'storage-closet' | 'executive-office'
+  // Furniture
+  | 'desk' | 'terminal-desk' | 'chair' | 'printer' | 'meeting-table' | 'whiteboard'
+  | 'bookshelf' | 'filing-cabinet' | 'water-cooler' | 'coffee-machine' | 'vending-machine'
+  | 'sofa' | 'lounge-chair' | 'coffee-table' | 'server-rack' | 'safe' | 'shredder'
+  | 'scanner' | 'monitor' | 'projector' | 'tv-screen'
+  // Vertical
+  | 'stair' | 'elevator'
+  // Dressing
+  | 'plant' | 'prop' | 'clock' | 'fire-extinguisher' | 'coat-rack' | 'umbrella-stand';
 
-type ToolCategory = 'structure' | 'workspaces' | 'furniture' | 'dress';
+type ToolCategory = 'structure' | 'rooms' | 'furniture' | 'tech' | 'breakroom' | 'vertical' | 'dress';
 type Department = 'General' | 'Janitorial' | 'IT' | 'HR' | 'Accounts' | 'Sales' | 'Security';
 type AccessMethod = 'Steal' | 'Gaslight' | 'Charm' | 'Seduce' | 'Impersonate';
 
@@ -152,29 +165,69 @@ interface PaletteItem {
 const DEPARTMENTS: Department[] = ['General', 'Janitorial', 'IT', 'HR', 'Accounts', 'Sales', 'Security'];
 const CANONICAL_STAFF = ['Bob', 'Sleepy Steve', 'Pam', 'Mr Purple', 'Fran', 'Chad', 'Rita', 'Mailroom Mike', 'Dave', 'Liz', 'Nervous Ned', 'Manager Mo', 'Jen', 'Data Dave', 'Boring Bill', 'Boss Barbara', 'Joe', 'Kevin', 'Old Tom'];
 const ACCESS_METHODS: AccessMethod[] = ['Steal', 'Gaslight', 'Charm', 'Seduce', 'Impersonate'];
-const ROOM_NAMES = ['Open office', 'Server room', 'HR suite', 'Meeting room', 'Reception', 'Janitor closet', 'Accounts'];
+const ROOM_NAMES = ['Open office', 'Server room', 'HR suite', 'Meeting room', 'Reception', 'Janitor closet', 'Accounts', 'Break room', 'Bathroom', 'Storage', 'Executive office', 'Security office', 'Marketing', 'Sales floor', 'Legal', 'Finance', 'Mailroom', 'Kitchen', 'Conference room', 'Training room', 'Quiet room', 'Phone booth', 'Server closet', 'Archive', 'Supply room'];
 
 const palette: PaletteItem[] = [
+  // ── Structure ──
   { type: 'wall', label: 'Wall', icon: Box, category: 'structure', size: [4, 1], color: 'stone', gameplay: true },
   { type: 'glass-wall', label: 'Glass wall', icon: Eye, category: 'structure', size: [4, 1], color: 'glass', gameplay: true },
+  { type: 'glass-partition', label: 'Glass partition', icon: Eye, category: 'structure', size: [3, 1], color: 'glass', gameplay: true },
   { type: 'door', label: 'Door', icon: LockKeyhole, category: 'structure', size: [2, 1], color: 'door', gameplay: true },
-  { type: 'office', label: 'Office', icon: Box, category: 'workspaces', size: [6, 5], color: 'room', gameplay: true },
-  { type: 'cubicle', label: 'Cubicle', icon: Grid3X3, category: 'workspaces', size: [4, 4], color: 'cubicle', gameplay: true },
-  { type: 'reception', label: 'Reception', icon: Users, category: 'workspaces', size: [7, 3], color: 'reception', gameplay: true },
+  { type: 'keycard-door', label: 'Keycard door', icon: KeyRound, category: 'structure', size: [2, 1], color: 'keycard-door', gameplay: true },
+  { type: 'window', label: 'Window', icon: Eye, category: 'structure', size: [3, 1], color: 'window', gameplay: false },
+  { type: 'column', label: 'Column', icon: Box, category: 'structure', size: [1, 1], color: 'stone', gameplay: false },
+  // ── Rooms ──
+  { type: 'office', label: 'Office', icon: Box, category: 'rooms', size: [6, 5], color: 'room', gameplay: true },
+  { type: 'cubicle', label: 'Cubicle', icon: Grid3X3, category: 'rooms', size: [4, 4], color: 'cubicle', gameplay: true },
+  { type: 'reception', label: 'Reception', icon: Users, category: 'rooms', size: [7, 3], color: 'reception', gameplay: true },
+  { type: 'meeting-room', label: 'Meeting room', icon: Users, category: 'rooms', size: [8, 5], color: 'meeting', gameplay: true },
+  { type: 'server-room', label: 'Server room', icon: Zap, category: 'rooms', size: [6, 4], color: 'server', gameplay: true },
+  { type: 'break-room', label: 'Break room', icon: Coffee, category: 'rooms', size: [6, 4], color: 'breakroom', gameplay: true },
+  { type: 'bathroom', label: 'Bathroom', icon: Droplets, category: 'rooms', size: [4, 3], color: 'bathroom', gameplay: true },
+  { type: 'storage-closet', label: 'Storage closet', icon: Package, category: 'rooms', size: [3, 3], color: 'storage', gameplay: true },
+  { type: 'executive-office', label: 'Executive office', icon: Box, category: 'rooms', size: [8, 6], color: 'executive', gameplay: true },
+  // ── Furniture ──
   { type: 'desk', label: 'Desk', icon: Box, category: 'furniture', size: [3, 2], color: 'desk', gameplay: true },
   { type: 'terminal-desk', label: 'Terminal desk', icon: FileJson, category: 'furniture', size: [3, 2], color: 'terminal', gameplay: true },
-  { type: 'chair', label: 'Chair', icon: Box, category: 'furniture', size: [2, 2], color: 'chair', gameplay: true },
+  { type: 'chair', label: 'Chair', icon: Armchair, category: 'furniture', size: [2, 2], color: 'chair', gameplay: true },
   { type: 'printer', label: 'Printer', icon: Box, category: 'furniture', size: [2, 2], color: 'printer', gameplay: true },
-  { type: 'stair', label: 'Stairs', icon: Layers3, category: 'workspaces', size: [3, 3], color: 'stairs', gameplay: true },
-  { type: 'elevator', label: 'Elevator', icon: Layers3, category: 'workspaces', size: [3, 3], color: 'elevator', gameplay: true },
+  { type: 'meeting-table', label: 'Meeting table', icon: Table, category: 'furniture', size: [6, 3], color: 'meeting-table', gameplay: true },
+  { type: 'whiteboard', label: 'Whiteboard', icon: Paintbrush, category: 'furniture', size: [4, 1], color: 'whiteboard', gameplay: true },
+  { type: 'bookshelf', label: 'Bookshelf', icon: BookOpen, category: 'furniture', size: [3, 1], color: 'bookshelf', gameplay: true },
+  { type: 'filing-cabinet', label: 'Filing cabinet', icon: Box, category: 'furniture', size: [2, 1], color: 'filing', gameplay: true },
+  { type: 'sofa', label: 'Sofa', icon: Armchair, category: 'furniture', size: [4, 2], color: 'sofa', gameplay: false },
+  { type: 'lounge-chair', label: 'Lounge chair', icon: Armchair, category: 'furniture', size: [2, 2], color: 'lounge', gameplay: false },
+  { type: 'coffee-table', label: 'Coffee table', icon: Table, category: 'furniture', size: [3, 2], color: 'coffee-table', gameplay: false },
+  { type: 'server-rack', label: 'Server rack', icon: Server, category: 'furniture', size: [2, 2], color: 'server-rack', gameplay: true },
+  { type: 'safe', label: 'Safe', icon: Shield, category: 'furniture', size: [2, 2], color: 'safe', gameplay: true },
+  { type: 'shredder', label: 'Shredder', icon: Shredder, category: 'furniture', size: [2, 1], color: 'shredder', gameplay: true },
+  { type: 'scanner', label: 'Scanner', icon: ScanLine, category: 'furniture', size: [2, 1], color: 'scanner', gameplay: true },
+  { type: 'monitor', label: 'Monitor', icon: Monitor, category: 'furniture', size: [2, 1], color: 'monitor', gameplay: true },
+  { type: 'projector', label: 'Projector', icon: Monitor, category: 'furniture', size: [2, 2], color: 'projector', gameplay: true },
+  { type: 'tv-screen', label: 'TV screen', icon: Monitor, category: 'furniture', size: [3, 1], color: 'tv', gameplay: true },
+  // ── Breakroom ──
+  { type: 'water-cooler', label: 'Water cooler', icon: Droplets, category: 'breakroom', size: [2, 2], color: 'water-cooler', gameplay: true },
+  { type: 'coffee-machine', label: 'Coffee machine', icon: Coffee, category: 'breakroom', size: [2, 2], color: 'coffee', gameplay: true },
+  { type: 'vending-machine', label: 'Vending machine', icon: Package, category: 'breakroom', size: [2, 2], color: 'vending', gameplay: true },
+  // ── Vertical ──
+  { type: 'stair', label: 'Stairs', icon: Layers3, category: 'vertical', size: [3, 3], color: 'stairs', gameplay: true },
+  { type: 'elevator', label: 'Elevator', icon: Layers3, category: 'vertical', size: [3, 3], color: 'elevator', gameplay: true },
+  // ── Dressing ──
   { type: 'plant', label: 'Plant', icon: Sparkles, category: 'dress', size: [2, 2], color: 'plant', gameplay: false },
   { type: 'prop', label: 'Prop marker', icon: Paintbrush, category: 'dress', size: [2, 2], color: 'prop', gameplay: false },
+  { type: 'clock', label: 'Wall clock', icon: Clock, category: 'dress', size: [1, 1], color: 'clock', gameplay: false },
+  { type: 'fire-extinguisher', label: 'Fire extinguisher', icon: Zap, category: 'dress', size: [1, 1], color: 'fire-ext', gameplay: true },
+  { type: 'coat-rack', label: 'Coat rack', icon: Package, category: 'dress', size: [1, 2], color: 'coat-rack', gameplay: false },
+  { type: 'umbrella-stand', label: 'Umbrella stand', icon: Package, category: 'dress', size: [1, 1], color: 'umbrella', gameplay: false },
 ];
 
 const categoryLabels: Record<ToolCategory, string> = {
   structure: 'Structure',
-  workspaces: 'Rooms & stations',
-  furniture: 'Gameplay props',
+  rooms: 'Rooms',
+  furniture: 'Furniture',
+  tech: 'Tech & equipment',
+  breakroom: 'Break room',
+  vertical: 'Vertical',
   dress: 'Dressing',
 };
 
@@ -183,10 +236,16 @@ const typeLabels: Record<ElementType, string> = Object.fromEntries(
 ) as Record<ElementType, string>;
 
 const initialCards: AccessCard[] = [
-  { id: 'card-janitor', name: 'Janitor master', holder: 'Gary / Janitorial', level: 1, color: '#c6a15b', methods: ['Steal', 'Charm', 'Impersonate'] },
-  { id: 'card-it', name: 'IT operations', holder: 'Mina / IT', level: 2, color: '#62a8a8', methods: ['Steal', 'Gaslight', 'Impersonate'] },
-  { id: 'card-accounts', name: 'Accounts level 3', holder: 'Gary / Accounts', level: 3, color: '#c8755a', methods: ['Gaslight', 'Charm', 'Seduce'] },
-  { id: 'card-hr', name: 'HR executive', holder: 'Nadia / HR', level: 4, color: '#8d79b8', methods: ['Charm', 'Seduce', 'Impersonate'] },
+  { id: 'card-janitor', name: 'Janitor master', holder: 'Joe / Janitorial', level: 1, color: '#c6a15b', methods: ['Steal', 'Charm', 'Impersonate'] },
+  { id: 'card-it', name: 'IT operations', holder: 'Sleepy Steve / IT', level: 2, color: '#62a8a8', methods: ['Steal', 'Gaslight', 'Impersonate'] },
+  { id: 'card-accounts', name: 'Accounts level 3', holder: 'Bob / Accounts', level: 3, color: '#c8755a', methods: ['Gaslight', 'Charm', 'Seduce'] },
+  { id: 'card-hr', name: 'HR executive', holder: 'Pam / HR', level: 4, color: '#8d79b8', methods: ['Charm', 'Seduce', 'Impersonate'] },
+  { id: 'card-security', name: 'Security access', holder: 'Nervous Ned / Security', level: 2, color: '#7a8a6e', methods: ['Steal', 'Gaslight'] },
+  { id: 'card-executive', name: 'Executive override', holder: 'Mr Purple / CEO', level: 5, color: '#9b5fb5', methods: ['Steal', 'Impersonate'] },
+  { id: 'card-reception', name: 'Reception visitor', holder: 'Rita / Reception', level: 1, color: '#d4a853', methods: ['Charm', 'Seduce'] },
+  { id: 'card-procurement', name: 'Procurement access', holder: 'Kevin / Procurement', level: 2, color: '#b87333', methods: ['Steal', 'Gaslight'] },
+  { id: 'card-legal', name: 'Legal confidential', holder: 'Dave / Legal', level: 3, color: '#6b7b8d', methods: ['Gaslight', 'Impersonate'] },
+  { id: 'card-executive-override', name: 'Master keycard', holder: 'Unknown', level: 6, color: '#e8d44d', methods: ['Steal'] },
 ];
 
 const initialFloors: LevelFloor[] = [
@@ -218,21 +277,74 @@ function starterElements(): LevelElement[] {
     });
   };
 
-  add('reception', 'Main reception', 10, 14, 8, 3, 'Reception', ['General', 'Security']);
+  // ── Perimeter walls ──
   add('wall', 'West wall', 1, 1, 1, 16, 'Open office', ['General']);
   add('wall', 'North wall', 1, 1, 26, 1, 'Open office', ['General']);
   add('wall', 'East wall', 26, 1, 1, 16, 'Open office', ['General']);
   add('wall', 'South wall', 1, 17, 26, 1, 'Reception', ['General']);
-  add('door', 'Server access', 4, 1, 2, 1, 'Server room', ['IT'], 'card-it');
-  add('office', 'Server room', 2, 3, 7, 5, 'Server room', ['IT'], 'card-it');
-  add('terminal-desk', 'Blueprint terminal', 4, 5, 3, 2, 'Server room', ['IT'], 'card-it');
-  add('office', 'HR suite', 18, 3, 6, 5, 'HR suite', ['HR'], 'card-hr');
-  add('door', 'HR access', 20, 3, 2, 1, 'HR suite', ['HR'], 'card-hr');
-  add('cubicle', 'Accounts pod', 11, 4, 4, 4, 'Accounts', ['Accounts'], 'card-accounts');
-  add('cubicle', 'Open pod', 11, 10, 4, 4, 'Open office', ['General', 'Sales']);
-  add('printer', 'Shared printer', 7, 10, 2, 2, 'Open office', ['General', 'HR']);
+
+  // ── Reception ──
+  add('reception', 'Main reception', 10, 14, 8, 3, 'Reception', ['General', 'Security']);
   add('desk', 'Reception desk', 11, 14, 4, 2, 'Reception', ['General', 'Security']);
   add('chair', 'Lobby chair', 17, 14, 2, 2, 'Reception', ['General']);
+  add('sofa', 'Waiting sofa', 10, 15, 4, 2, 'Reception', ['General']);
+  add('plant', 'Lobby plant', 18, 15, 2, 2, 'Reception', ['General']);
+
+  // ── Server room (IT) ──
+  add('server-room', 'Server room', 2, 3, 7, 5, 'Server room', ['IT'], 'card-it');
+  add('keycard-door', 'Server access', 4, 3, 2, 1, 'Server room', ['IT'], 'card-it');
+  add('server-rack', 'Rack A', 3, 4, 2, 2, 'Server room', ['IT'], 'card-it');
+  add('server-rack', 'Rack B', 5, 4, 2, 2, 'Server room', ['IT'], 'card-it');
+  add('terminal-desk', 'IT terminal', 3, 6, 3, 2, 'Server room', ['IT'], 'card-it');
+  add('monitor', 'Status monitor', 6, 6, 2, 1, 'Server room', ['IT'], 'card-it');
+
+  // ── HR suite ──
+  add('office', 'HR suite', 18, 3, 6, 5, 'HR suite', ['HR'], 'card-hr');
+  add('keycard-door', 'HR access', 20, 3, 2, 1, 'HR suite', ['HR'], 'card-hr');
+  add('desk', 'HR desk', 19, 5, 3, 2, 'HR suite', ['HR'], 'card-hr');
+  add('filing-cabinet', 'Personnel files', 22, 4, 2, 1, 'HR suite', ['HR'], 'card-hr');
+  add('chair', 'Interview chair', 21, 6, 2, 2, 'HR suite', ['HR'], 'card-hr');
+
+  // ── Executive office ──
+  add('executive-office', 'CEO office', 2, 10, 8, 6, 'Executive office', ['Security'], 'card-executive');
+  add('keycard-door', 'Executive access', 4, 10, 2, 1, 'Executive office', ['Security'], 'card-executive');
+  add('desk', 'Executive desk', 4, 12, 4, 2, 'Executive office', ['Security'], 'card-executive');
+  add('safe', 'Executive safe', 8, 11, 2, 2, 'Executive office', ['Security'], 'card-executive');
+  add('plant', 'Executive plant', 3, 14, 2, 2, 'Executive office', ['Security']);
+
+  // ── Cubicle farm ──
+  add('cubicle', 'Accounts pod', 11, 4, 4, 4, 'Accounts', ['Accounts'], 'card-accounts');
+  add('cubicle', 'Sales pod', 16, 4, 4, 4, 'Sales', ['Sales']);
+  add('cubicle', 'Open pod A', 11, 9, 4, 4, 'Open office', ['General']);
+  add('cubicle', 'Open pod B', 16, 9, 4, 4, 'Open office', ['General']);
+
+  // ── Meeting room ──
+  add('meeting-room', 'Conference room', 18, 10, 8, 6, 'Meeting room', ['General']);
+  add('glass-wall', 'Glass front', 18, 10, 8, 1, 'Meeting room', ['General']);
+  add('meeting-table', 'Conference table', 20, 12, 5, 3, 'Meeting room', ['General']);
+  add('whiteboard', 'Presentation board', 25, 11, 1, 4, 'Meeting room', ['General']);
+  add('projector', 'Ceiling projector', 22, 11, 2, 2, 'Meeting room', ['General']);
+
+  // ── Break room ──
+  add('break-room', 'Staff kitchen', 2, 14, 6, 3, 'Break room', ['General']);
+  add('coffee-machine', 'Coffee station', 3, 14, 2, 2, 'Break room', ['General']);
+  add('vending-machine', 'Vending', 5, 14, 2, 2, 'Break room', ['General']);
+  add('water-cooler', 'Water cooler', 3, 16, 2, 2, 'Break room', ['General']);
+
+  // ── Open office furniture ──
+  add('printer', 'Shared printer', 7, 9, 2, 2, 'Open office', ['General']);
+  add('terminal-desk', 'Hot desk', 7, 4, 3, 2, 'Open office', ['General']);
+  add('desk', 'Admin desk', 7, 6, 3, 2, 'Open office', ['General']);
+  add('bookshelf', 'Reference shelf', 1, 8, 3, 1, 'Open office', ['General']);
+
+  // ── Vertical ──
+  add('elevator', 'Main elevator', 12, 16, 3, 2, 'Reception', ['General']);
+  add('stair', 'Fire stairs', 24, 16, 3, 2, 'Open office', ['General']);
+
+  // ── Dressing ──
+  add('plant', 'Corner plant', 1, 1, 2, 2, 'Open office', ['General']);
+  add('plant', 'Hallway plant', 26, 8, 2, 2, 'Open office', ['General']);
+
   return items;
 }
 
@@ -240,8 +352,15 @@ function initialDressing(): DressingItem[] {
   return [
     { id: idFor('light'), type: 'light', floorId: 'floor-1', x: 8, y: 3, label: 'Fluorescent strip' },
     { id: idFor('light'), type: 'light', floorId: 'floor-1', x: 18, y: 10, label: 'Fluorescent strip' },
+    { id: idFor('light'), type: 'light', floorId: 'floor-1', x: 5, y: 12, label: 'Fluorescent strip' },
     { id: idFor('plant'), type: 'plant', floorId: 'floor-1', x: 23, y: 13, label: 'Office plant' },
+    { id: idFor('plant'), type: 'plant', floorId: 'floor-1', x: 9, y: 8, label: 'Hallway fern' },
     { id: idFor('picture'), type: 'picture', floorId: 'floor-1', x: 10, y: 2, label: 'Motivational print' },
+    { id: idFor('sign'), type: 'sign', floorId: 'floor-1', x: 12, y: 1, label: 'Floor directory' },
+    { id: idFor('clutter'), type: 'clutter', floorId: 'floor-1', x: 7, y: 11, label: 'Stack of reports' },
+    { id: idFor('clutter'), type: 'clutter', floorId: 'floor-1', x: 15, y: 6, label: 'Coffee mug' },
+    { id: idFor('light'), type: 'light', floorId: 'floor-2', x: 10, y: 8, label: 'Fluorescent strip' },
+    { id: idFor('plant'), type: 'plant', floorId: 'floor-2', x: 3, y: 3, label: 'Executive orchid' },
   ];
 }
 

@@ -70,7 +70,7 @@
 .right-rail { border-left: 1px solid var(--line); }
 .rail-heading { min-height: 24px; justify-content: space-between; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
 .count-label, .selection-state { color: var(--muted); font-size: 9px; font-weight: 400; }
-.category-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; margin: 18px 0 12px; }
+.category-tabs { display: flex; flex-wrap: wrap; gap: 3px; margin: 18px 0 12px; }
 .category-tabs button { border: 0; background: transparent; color: var(--muted); padding: 8px 5px; text-align: left; font-size: 11px; border-bottom: 2px solid transparent; }
 .category-tabs button.active { color: var(--ink); border-bottom-color: var(--copper); font-weight: 700; }
 .palette-list { display: grid; gap: 4px; }
@@ -82,17 +82,46 @@
 .palette-stone { background: #a4aaa2; color: #31403e; }
 .palette-glass { background: #b8d9d5; color: #286d6c; }
 .palette-door { background: #d39b68; color: #5f3e2e; }
+.palette-keycard-door { background: #d39b68; color: #5f3e2e; }
+.palette-window { background: #b0d8e0; color: #2a6070; }
 .palette-room { background: #d8ced0; color: #554148; }
 .palette-cubicle { background: #c7d2d4; color: #40565b; }
 .palette-reception { background: #d9c49c; color: #665239; }
+.palette-meeting { background: #c8bed4; color: #554868; }
+.palette-server { background: #8a9aa8; color: #2a3a48; }
+.palette-breakroom { background: #c0d4b0; color: #4a6840; }
+.palette-bathroom { background: #b0c8d8; color: #3a5868; }
+.palette-storage { background: #c8bca0; color: #605838; }
+.palette-executive { background: #c0a8d0; color: #504060; }
 .palette-desk { background: #ded8ca; color: #665f50; }
 .palette-terminal { background: #acd3ce; color: #1b6667; }
 .palette-chair { background: #c9c1bd; color: #5e4e4c; }
 .palette-printer { background: #c8d0d2; color: #47535a; }
+.palette-meeting-table { background: #d0c8a8; color: #605830; }
+.palette-whiteboard { background: #e8e8e0; color: #606060; }
+.palette-bookshelf { background: #c8b898; color: #605030; }
+.palette-filing { background: #b0b8c0; color: #404850; }
+.palette-sofa { background: #b0b0c0; color: #484860; }
+.palette-lounge { background: #c0b8b0; color: #585048; }
+.palette-coffee-table { background: #d0c8b0; color: #605840; }
+.palette-server-rack { background: #708898; color: #203040; }
+.palette-safe { background: #909090; color: #303030; }
+.palette-shredder { background: #a0a0a0; color: #404040; }
+.palette-scanner { background: #b0b8c0; color: #404850; }
+.palette-monitor { background: #506878; color: #1a2838; }
+.palette-projector { background: #909098; color: #383840; }
+.palette-tv { background: #404050; color: #c0c0d0; }
+.palette-water-cooler { background: #a0d0e0; color: #286878; }
+.palette-coffee { background: #c0a070; color: #584020; }
+.palette-vending { background: #a0b0c0; color: #384858; }
 .palette-stairs { background: #c9c6dc; color: #5f5d7a; }
 .palette-elevator { background: #c4cdd6; color: #4b5b68; }
 .palette-plant { background: #c4d4b7; color: #4c7043; }
 .palette-prop { background: #ded0ae; color: #846d32; }
+.palette-clock { background: #d0d0d0; color: #505050; }
+.palette-fire-ext { background: #e08080; color: #802020; }
+.palette-coat-rack { background: #c0b0a0; color: #504030; }
+.palette-umbrella { background: #b0b0b8; color: #404048; }
 .rail-tip { gap: 8px; margin: 18px 3px 0; border-top: 1px solid var(--line); padding-top: 14px; color: var(--muted); font-size: 11px; line-height: 1.45; }
 
 .canvas-stage { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: #edf1ee; }
@@ -132,17 +161,46 @@
 .element-stone { background: #89948e; }
 .element-glass { background: rgba(105, 176, 174, .28); border-style: dashed; }
 .element-door { background: #dbad78; }
+.element-keycard-door { background: #dbad78; border-style: double; border-width: 3px; }
+.element-window { background: rgba(160, 210, 220, .35); border-style: dotted; }
 .element-room { background: rgba(191, 169, 177, .5); }
 .element-cubicle { background: rgba(153, 174, 179, .55); }
 .element-reception { background: rgba(204, 174, 119, .65); }
+.element-meeting { background: rgba(170, 160, 190, .5); }
+.element-server { background: rgba(80, 100, 120, .55); }
+.element-breakroom { background: rgba(180, 200, 160, .5); }
+.element-bathroom { background: rgba(140, 180, 200, .45); }
+.element-storage { background: rgba(170, 160, 140, .5); }
+.element-executive { background: rgba(160, 130, 170, .55); }
 .element-desk { background: #d5cec0; }
 .element-terminal { background: rgba(86, 174, 166, .62); }
 .element-chair { background: #b9aaa5; }
 .element-printer { background: #aebbc0; }
+.element-meeting-table { background: #c4b89a; }
+.element-whiteboard { background: #e8e8e0; border-style: dashed; }
+.element-bookshelf { background: #b8a88a; }
+.element-filing { background: #a0a8b0; }
+.element-sofa { background: #a0a0b0; border-radius: 6px; }
+.element-lounge { background: #b0a8a0; border-radius: 50% 50% 4px 4px; }
+.element-coffee-table { background: #c0b8a0; }
+.element-server-rack { background: rgba(60, 80, 100, .65); }
+.element-safe { background: #888; border-style: double; border-width: 3px; }
+.element-shredder { background: #909090; }
+.element-scanner { background: #a0a8b0; }
+.element-monitor { background: rgba(40, 60, 80, .6); }
+.element-projector { background: rgba(100, 100, 120, .5); }
+.element-tv { background: rgba(30, 30, 40, .7); }
+.element-water-cooler { background: rgba(120, 180, 200, .55); }
+.element-coffee { background: rgba(140, 100, 70, .55); }
+.element-vending { background: rgba(100, 120, 140, .6); }
 .element-stairs { background: #b6afd0; }
 .element-elevator { background: #aebdca; }
 .element-plant { background: rgba(133, 169, 111, .6); border-radius: 50%; }
 .element-prop { background: rgba(210, 178, 98, .5); border-style: dotted; }
+.element-clock { background: rgba(200, 200, 200, .5); border-radius: 50%; }
+.element-fire-ext { background: rgba(200, 60, 60, .6); }
+.element-coat-rack { background: #a09080; }
+.element-umbrella { background: #909098; }
 .element-key::after { content: ''; }
 .element-key { position: absolute; right: 3px; top: 3px; color: #9a573f; }
 .dressing-marker { position: absolute; z-index: 3; transform: translate(-50%, -50%); pointer-events: auto; font-size: 14px; color: #bd9b42; opacity: .75; }
