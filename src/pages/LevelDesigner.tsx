@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, CSSProperties, DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from 'react';
+import { lazy, Suspense } from 'react';
 import {
   Armchair,
   BookOpen,
@@ -37,6 +38,7 @@ import {
   Zap,
 } from 'lucide-react';
 import './LevelDesigner.css';
+const LevelEditor3D = lazy(() => import('../components/LevelEditor3D'));
 
 type ElementType =
   // Structure
@@ -51,10 +53,12 @@ type ElementType =
   | 'scanner' | 'monitor' | 'projector' | 'tv-screen'
   // Vertical
   | 'stair' | 'elevator'
+  // Infiltration
+  | 'air-duct' | 'duct-vent' | 'vent-access' | 'hiding-nook' | 'body-disposal'
   // Dressing
   | 'plant' | 'prop' | 'clock' | 'fire-extinguisher' | 'coat-rack' | 'umbrella-stand';
 
-type ToolCategory = 'structure' | 'rooms' | 'furniture' | 'tech' | 'breakroom' | 'vertical' | 'dress';
+type ToolCategory = 'structure' | 'rooms' | 'furniture' | 'tech' | 'breakroom' | 'vertical' | 'infiltration' | 'dress';
 type Department = 'General' | 'Janitorial' | 'IT' | 'HR' | 'Accounts' | 'Sales' | 'Security';
 type AccessMethod = 'Steal' | 'Gaslight' | 'Charm' | 'Seduce' | 'Impersonate';
 
@@ -212,6 +216,12 @@ const palette: PaletteItem[] = [
   // ── Vertical ──
   { type: 'stair', label: 'Stairs', icon: Layers3, category: 'vertical', size: [3, 3], color: 'stairs', gameplay: true },
   { type: 'elevator', label: 'Elevator', icon: Layers3, category: 'vertical', size: [3, 3], color: 'elevator', gameplay: true },
+  // ── Infiltration ──
+  { type: 'air-duct', label: 'Air duct', icon: Box, category: 'infiltration', size: [3, 1], color: 'duct', gameplay: true },
+  { type: 'duct-vent', label: 'Duct vent', icon: Box, category: 'infiltration', size: [2, 2], color: 'vent', gameplay: true },
+  { type: 'vent-access', label: 'Vent access', icon: Box, category: 'infiltration', size: [2, 2], color: 'vent-access', gameplay: true },
+  { type: 'hiding-nook', label: 'Hiding nook', icon: Box, category: 'infiltration', size: [2, 2], color: 'nook', gameplay: true },
+  { type: 'body-disposal', label: 'Body disposal', icon: Box, category: 'infiltration', size: [2, 2], color: 'disposal', gameplay: true },
   // ── Dressing ──
   { type: 'plant', label: 'Plant', icon: Sparkles, category: 'dress', size: [2, 2], color: 'plant', gameplay: false },
   { type: 'prop', label: 'Prop marker', icon: Paintbrush, category: 'dress', size: [2, 2], color: 'prop', gameplay: false },
@@ -228,6 +238,7 @@ const categoryLabels: Record<ToolCategory, string> = {
   tech: 'Tech & equipment',
   breakroom: 'Break room',
   vertical: 'Vertical',
+  infiltration: 'Infiltration',
   dress: 'Dressing',
 };
 
@@ -411,6 +422,7 @@ export default function LevelDesigner({ onPlay }: LevelDesignerProps) {
   const [zoom, setZoom] = useState(1);
   const [status, setStatus] = useState('Unsaved workshop');
   const [dragging, setDragging] = useState<{ id: string; offset: Vec2 } | null>(null);
+  const [viewMode, setViewMode] = useState<'2d' | '3d'>('2d');
   const fileRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -738,6 +750,9 @@ export default function LevelDesigner({ onPlay }: LevelDesignerProps) {
               <button className="icon-button add-floor" title="Add floor" onClick={addFloor}><Plus size={16} /></button>
             </div>
             <div className="canvas-tools">
+              <button className={`toggle-button ${viewMode === '2d' ? 'on' : ''}`} onClick={() => setViewMode('2d')}><Grid3X3 size={15} /> 2D</button>
+              <button className={`toggle-button ${viewMode === '3d' ? 'on' : ''}`} onClick={() => setViewMode('3d')}><Box size={15} /> 3D</button>
+              <span className="meta-divider" />
               <button className={`toggle-button ${showGrid ? 'on' : ''}`} onClick={() => setShowGrid(value => !value)}><Grid3X3 size={15} /> Grid</button>
               <button className={`toggle-button ${showDressing ? 'on' : ''}`} onClick={() => setShowDressing(value => !value)}><Eye size={15} /> Dressing</button>
               <button className="icon-button" title="Zoom out" onClick={() => setZoom(value => Math.max(0.8, value - 0.1))}>−</button>
@@ -750,6 +765,20 @@ export default function LevelDesigner({ onPlay }: LevelDesignerProps) {
             <div className="legend"><span className={validation.length ? 'validation-warning' : 'validation-ok'}>{validation.length ? `${validation.length} validation issue${validation.length === 1 ? '' : 's'}` : 'Plan validates'}</span><span><i className="legend-swatch gameplay" /> Gameplay</span><span><i className="legend-swatch dress" /> Dressing only</span></div>
           </div>
           <div className="canvas-wrap">
+            {viewMode === '3d' ? (
+              <Suspense fallback={<div style={{ display: 'grid', placeItems: 'center', height: '100%', color: '#8a9a90' }}>Loading 3D editor…</div>}>
+                <LevelEditor3D
+                  elements={visibleElements}
+                  activeTool={activeTool}
+                  palette={palette}
+                  gridWidth={currentFloor.width}
+                  gridHeight={currentFloor.height}
+                  onPlace={(type, x, y, _w, _h) => placeElement(type, { x: x + 1, y: y + 1 })}
+                  onSelect={setSelectedId}
+                  selectedId={selectedId}
+                />
+              </Suspense>
+            ) : (
             <div
               ref={canvasRef}
               className={`level-canvas ${showGrid ? 'grid-visible' : ''}`}
@@ -794,6 +823,7 @@ export default function LevelDesigner({ onPlay }: LevelDesignerProps) {
               })}
               <div className="scale-ruler"><span>0</span><span>5 cells</span><span>10</span></div>
             </div>
+            )}
           </div>
           <div className="canvas-footer"><span><MousePointer2 size={13} /> {selected ? `${selected.label} selected` : 'Select an item to edit properties'}</span><span>Snap: 1 cell <span className="footer-separator">·</span> Collisions use element footprint</span></div>
         </section>

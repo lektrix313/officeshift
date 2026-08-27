@@ -95,6 +95,13 @@ public static class OfficeRenderer
             case "coat-rack": RenderCoatRack(parent, cx, cz); break;
             case "umbrella-stand": RenderBox(parent, cx, 0.25f, cz, 0.3f, 0.5f, 0.3f, "909098"); break;
 
+            // ── Infiltration ──
+            case "air-duct": RenderAirDuct(parent, cx, cz, w, d); break;
+            case "duct-vent": RenderDuctVent(parent, cx, cz); break;
+            case "vent-access": RenderVentAccess(parent, cx, cz); break;
+            case "hiding-nook": RenderHidingNook(parent, cx, cz, w, d); break;
+            case "body-disposal": RenderBodyDisposal(parent, cx, cz); break;
+
             // ── Fallback ──
             default: RenderBox(parent, cx, DeskH / 2f, cz, w, DeskH, d, "8a7860"); break;
         }
@@ -560,6 +567,83 @@ public static class OfficeRenderer
         AddBox(p, cx + 0.12f, 1.7f, cz, 0.04f, 0.04f, 0.15f, "888078", solid: false);
         AddBox(p, cx, 1.7f, cz - 0.12f, 0.15f, 0.04f, 0.04f, "888078", solid: false);
         AddBox(p, cx, 1.7f, cz + 0.12f, 0.15f, 0.04f, 0.04f, "888078", solid: false);
+    }
+
+    // ════════════════════════════════════════════════════════════
+    //  INFILTRATION
+    // ════════════════════════════════════════════════════════════
+
+    private static void RenderAirDuct(Node3D p, float cx, float cz, float w, float d)
+    {
+        // Duct pipe (ceiling-mounted cylinder)
+        AddCylinder(p, cx, WallH - 0.3f, cz, 0.35f, 0.25f, "786e64");
+        // Duct mounting brackets
+        AddBox(p, cx - w * 0.3f, WallH - 0.15f, cz, 0.08f, 0.12f, 0.08f, "605848", solid: false);
+        AddBox(p, cx + w * 0.3f, WallH - 0.15f, cz, 0.08f, 0.12f, 0.08f, "605848", solid: false);
+        // Duct seam lines
+        for (int i = 0; i < 3; i++)
+        {
+            float dx = cx - w * 0.3f + i * w * 0.3f;
+            AddBox(p, dx, WallH - 0.3f, cz, 0.03f, 0.26f, 0.03f, "584e40", solid: false);
+        }
+    }
+
+    private static void RenderDuctVent(Node3D p, float cx, float cz)
+    {
+        // Vent grate on floor
+        AddBox(p, cx, 0.02f, cz, 1.2f, 0.04f, 1.2f, "64646e", solid: false);
+        // Grate bars
+        for (int i = 0; i < 5; i++)
+        {
+            float offset = -0.4f + i * 0.2f;
+            AddBox(p, cx + offset, 0.04f, cz, 0.02f, 0.03f, 1.0f, "505058", solid: false);
+        }
+        // Duct opening (dark hole underneath)
+        AddBox(p, cx, -0.1f, cz, 0.9f, 0.15f, 0.9f, "1a1a20", solid: false);
+    }
+
+    private static void RenderVentAccess(Node3D p, float cx, float cz)
+    {
+        // Wall-mounted vent panel
+        AddBox(p, cx, 1.8f, cz, 0.8f, 0.8f, 0.08f, "505860", solid: false);
+        // Grate pattern
+        for (int i = 0; i < 4; i++)
+        {
+            float y = 1.55f + i * 0.18f;
+            AddBox(p, cx, y, cz + 0.05f, 0.7f, 0.04f, 0.02f, "404848", solid: false);
+        }
+        // Duct behind (visible through grate)
+        AddBox(p, cx, 1.8f, cz - 0.15f, 0.6f, 0.6f, 0.15f, "2a2a30", solid: false);
+        // Hinge detail
+        AddBox(p, cx - 0.38f, 2.18f, cz + 0.06f, 0.04f, 0.08f, 0.04f, "888888", solid: false);
+        AddBox(p, cx - 0.38f, 1.42f, cz + 0.06f, 0.04f, 0.08f, 0.04f, "888888", solid: false);
+    }
+
+    private static void RenderHidingNook(Node3D p, float cx, float cz, float w, float d)
+    {
+        // Back wall of nook
+        AddBox(p, cx, 1.0f, cz - d * 0.4f, w * 0.9f, 2.0f, 0.15f, "706858", solid: true);
+        // Side walls
+        AddBox(p, cx - w * 0.45f, 1.0f, cz, 0.12f, 2.0f, d * 0.8f, "706858", solid: true);
+        AddBox(p, cx + w * 0.45f, 1.0f, cz, 0.12f, 2.0f, d * 0.8f, "706858", solid: true);
+        // Floor mat
+        AddBox(p, cx, 0.02f, cz, w * 0.7f, 0.04f, d * 0.6f, "504840", solid: false);
+        // Shadow indicator (dark area)
+        AddBox(p, cx, 0.03f, cz, w * 0.8f, 0.02f, d * 0.7f, "3a3430", solid: false, emissive: false);
+    }
+
+    private static void RenderBodyDisposal(Node3D p, float cx, float cz)
+    {
+        // Incinerator body
+        AddBox(p, cx, 0.6f, cz, 1.2f, 1.2f, 1.0f, "605040", solid: true);
+        // Door
+        AddBox(p, cx, 0.7f, cz + 0.51f, 0.8f, 0.8f, 0.06f, "806050", solid: false);
+        // Handle
+        AddBox(p, cx + 0.25f, 0.7f, cz + 0.55f, 0.1f, 0.06f, 0.04f, "c0a840", solid: false);
+        // Chimney vent
+        AddBox(p, cx, 1.5f, cz, 0.3f, 0.6f, 0.3f, "504040", solid: false);
+        // Temperature warning
+        AddBox(p, cx - 0.4f, 1.1f, cz + 0.52f, 0.15f, 0.1f, 0.02f, "ff3020", solid: false, emissive: true);
     }
 
     // ════════════════════════════════════════════════════════════

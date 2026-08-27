@@ -522,3 +522,21 @@ fun-per-line-of-code. This file is the loop's persistent state.
 - [x] Floor accent strips for wet rooms (bathroom, break room)
 - [x] Door panels now have raised inset detail and number plates
 - [x] C# build: 0 errors, 0 warnings
+
+### CYCLE 39 — 3D viewport, infiltration system, and air ducts (IMPLEMENTED)
+- [x] Installed @react-three/fiber and @react-three/drei for 3D viewport
+- [x] Created LevelEditor3D.tsx with Three.js canvas, orbit controls, floor grid
+- [x] Green/red ghost preview for element placement validation
+- [x] Click-and-drag wall/window drawing in 3D
+- [x] Existing elements render as 3D meshes with selection highlight
+- [x] 2D/3D view toggle in canvas toolbar
+- [x] Added infiltration element types: air-duct, duct-vent, vent-access, hiding-nook, body-disposal
+- [x] Air duct network rendering (ceiling pipes with brackets and seams)
+- [x] Duct vents (floor grates with dark openings)
+- [x] Vent access panels (wall-mounted with grate pattern)
+- [x] Hiding nooks (enclosed alcoves with floor mat)
+- [x] Body disposal (incinerator with door, chimney, temperature warning)
+- [x] Duct overlay rendering connections between vents in 3D
+- [x] C# OfficeRenderer updated with all infiltration element meshes
+- [x] Frontend build: 0 errors
+- [x] C# build: 0 errors, 0 warnings
