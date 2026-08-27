@@ -190,6 +190,10 @@ public partial class NpcBrain : Node
     public Vector3? MoveTarget;
     public float PauseTimer;
     public bool Moving;
+    private float _stuckTimer;
+    private Vector3 _lastPos;
+    private const float StuckThreshold = 0.15f;
+    private const float StuckRecoverSeconds = 2.5f;
 
     public static NpcBrain Create(NpcBody body, string zone)
     {
@@ -452,7 +456,13 @@ public partial class NpcBrain : Node
         if (beat.Destination == "closet") return new Vector3(26f, 0f, 11f);
         if (beat.Destination == "reception") return new Vector3(0f, 0f, 17f);
         var points = ctx.WorldRef.WaypointsFor(beat.Destination);
-        return points.Length > 0 ? points[0] : WorkdayPoint(ctx);
+        if (points.Length == 0) return WorkdayPoint(ctx);
+        // Spread NPCs in the same zone to prevent stacking (deterministic per-name jitter)
+        int idx = System.HashCode.Combine(NpcName, beat.Id) % points.Length;
+        var basePt = points[System.Math.Abs(idx) % points.Length];
+        float jitterX = ((System.HashCode.Combine(NpcName, "x") & 0xFF) / 255f - 0.5f) * 1.2f;
+        float jitterZ = ((System.HashCode.Combine(NpcName, "z") & 0xFF) / 255f - 0.5f) * 1.2f;
+        return new Vector3(basePt.X + jitterX, 0f, basePt.Z + jitterZ);
     }
 
     public bool WorkdayNeedsMovement => WorkState is
@@ -744,13 +754,42 @@ public partial class NpcBrain : Node
         if (dist < Bal.ArrivalDist)
         {
             Moving = false;
+            _stuckTimer = 0f;
             return true;
         }
         float step = System.MathF.Min(dist, speed * (float)dt);
         pos.X += dx / dist * step;
         pos.Z += dz / dist * step;
         world.ResolveCircle(ref pos, Bal.NpcRadius);
+
+        // NPC-NPC mutual pushout: prevent NPCs from walking through each other
+        PushNpcsAway(pos, Bal.NpcRadius, (float)dt);
+
+        // NPC-player pushout: prevent NPCs from walking through the player
+        PushAwayFromPlayer(ref pos);
+
         Body.Position = pos;
+
+        // stuck detection: if we barely moved, accumulate stuck time
+        float moved = pos.DistanceTo(_lastPos);
+        if (Moving && moved < StuckThreshold * speed * (float)dt)
+            _stuckTimer += (float)dt;
+        else
+            _stuckTimer = 0f;
+        _lastPos = pos;
+
+        // stuck recovery: wiggle perpendicular to movement direction
+        if (_stuckTimer > StuckRecoverSeconds)
+        {
+            _stuckTimer = 0f;
+            float perpX = -dz / dist;
+            float perpZ = dx / dist;
+            float wiggle = (System.MathF.Sin(AiDirector.Now * 7.3f) > 0f ? 1f : -1f) * Bal.NpcRadius * 1.5f;
+            pos.X += perpX * wiggle;
+            pos.Z += perpZ * wiggle;
+            world.ResolveCircle(ref pos, Bal.NpcRadius);
+            Body.Position = pos;
+        }
 
         Moving = true;
         float desired = System.MathF.Atan2(dx, dz);
@@ -759,6 +798,54 @@ public partial class NpcBrain : Node
         while (diff < -System.MathF.PI) diff += System.MathF.Tau;
         Body.Facing += diff * System.MathF.Min(1f, (float)dt * 8f);
         return false;
+    }
+
+    /// <summary>Push this NPC away from all other awake NPCs to prevent stacking.</summary>
+    private void PushNpcsAway(Vector3 pos, float radius, float dt)
+    {
+        // This is called from StepToward but needs the NPC list.
+        // We store a static reference set by GameMode during tick.
+        if (_nearbyNpcs == null) return;
+        foreach (var other in _nearbyNpcs)
+        {
+            if (ReferenceEquals(other, this) || !other.Awake) continue;
+            Vector3 oPos = other.Body.Position;
+            float dx = pos.X - oPos.X;
+            float dz = pos.Z - oPos.Z;
+            float d2 = dx * dx + dz * dz;
+            float minDist = radius * 2.2f;
+            if (d2 >= minDist * minDist || d2 < 1e-8f) continue;
+            float d = System.MathF.Sqrt(d2);
+            float push = (minDist - d) * 0.5f;
+            pos.X += dx / d * push;
+            pos.Z += dz / d * push;
+            Body.Position = pos;
+        }
+    }
+
+    /// <summary>Push position away from the player if too close.</summary>
+    private void PushAwayFromPlayer(ref Vector3 pos)
+    {
+        if (_playerRef == null) return;
+        Vector3 pPos = _playerRef.FeetPos;
+        float dx = pos.X - pPos.X;
+        float dz = pos.Z - pPos.Z;
+        float d2 = dx * dx + dz * dz;
+        float minDist = Bal.NpcRadius + Bal.PlayerRadius + 0.15f;
+        if (d2 >= minDist * minDist || d2 < 1e-8f) return;
+        float d = System.MathF.Sqrt(d2);
+        float push = (minDist - d);
+        pos.X += dx / d * push;
+        pos.Z += dz / d * push;
+    }
+
+    // Static refs set by GameMode each tick to avoid per-NPC allocations
+    private static List<NpcBrain>? _nearbyNpcs;
+    private static PlayerController? _playerRef;
+    public static void SetTickRefs(List<NpcBrain> npcs, PlayerController? player)
+    {
+        _nearbyNpcs = npcs;
+        _playerRef = player;
     }
 }
 

@@ -435,3 +435,14 @@ fun-per-line-of-code. This file is the loop's persistent state.
 - [x] C# build: 0 errors, 0 warnings
 - [x] Frontend build: passed
 - [ ] Godot runtime capture remains pending until the local Mono assembly startup blocker is resolved
+
+### CYCLE 33 — NPC collision avoidance and navigation hardening (IMPLEMENTED)
+- [x] Added NPC-NPC mutual pushout in `StepToward`: NPCs no longer walk through each other
+- [x] Added NPC-player collision pushout: NPCs pushed away from the player's feet radius
+- [x] Added stuck detection: accumulates time when NPC barely moves despite targeting a destination
+- [x] Added stuck recovery: perpendicular wiggle to escape corners and overlapping colliders
+- [x] Added deterministic per-NPC waypoint jitter: NPCs heading to the same zone (meeting room, coffee, etc.) are spread to different sub-positions using a name-hash offset
+- [x] Wired static NPC list and player reference to `NpcBrain` via `SetTickRefs` to avoid per-frame allocations
+- [x] C# build: 0 errors, 0 warnings
+- [x] Frontend build: passed
+- [ ] Godot runtime capture remains pending until the local Mono assembly startup blocker is resolved

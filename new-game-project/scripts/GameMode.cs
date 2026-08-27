@@ -418,6 +418,7 @@ public partial class GameMode : Node3D
             OnPlayerCaught = () => EndGame(false, "Officer Mr Purple caught you red-handed. HR would like a word. Several words. In a basement."),
             GameMode = this,
         };
+        NpcBrain.SetTickRefs(Npcs, Player);
         Social.Tick(Npcs, (float)dt, WorkdayBalance.WorkdayStartHour + _shiftElapsed / (Bal.ShiftSeconds / 8f));
         TickMultiFloorRoutes((float)dt);
         AiDirector.Tick(Npcs, ctx, dt);
