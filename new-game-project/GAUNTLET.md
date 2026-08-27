@@ -202,6 +202,128 @@ fun-per-line-of-code. This file is the loop's persistent state.
 - [x] `++ capture reactions` demonstrates player crime followed by an ambient alarm with different NPC responses
 - [ ] Godot runtime reaction movie capture remains pending until the local Mono assembly startup blocker is resolved
 
+### CYCLE 22 — bounded social simulation and utility actions (IMPLEMENTED, runtime capture pending)
+- [x] Roasted the first social-AI pass: dead action selector, no-op authored-routine branch, unseeded randomness, duplicate needs path, and hard-coded waypoint use
+- [x] Added tagged waypoint records with visibility, social value, cover value, capacity, and zone metadata
+- [x] Added bounded needs for social, coffee, snacks, toilet, and boredom, with explicit satisfaction rules
+- [x] Added stable relationship chemistry, friction, trust, and interaction cooldowns
+- [x] Added office chaos and surprise budgets so autonomous behavior cannot flood the shift with noise
+- [x] Seeded simulation randomness for repeatable captures and debugging
+- [x] Added utility action application: autonomous choices now set destinations and work states instead of being dead calculations
+- [x] Authored workday beats remain authoritative; autonomous actions fill gaps and only introduce small variation
+- [x] NPC-to-NPC interactions now affect both participants and create temporary readable attitudes
+- [x] Added procedural replacement profiles with bounded variation and no canonical-secret inheritance
+- [ ] Replace remaining legacy roster/coordinate data with the canonical level-designer assignment schema
+- [ ] Add deterministic `++ capture social` coverage after the local Godot Mono startup blocker is resolved
+
+### CYCLE 23 — canonical roster unification (IMPLEMENTED, runtime capture pending)
+- [x] Audited all roster spawn, persona, workday, boss, replacement, and chat lookups
+- [x] Runtime spawning now uses `CanonicalStaff.Assignments` exclusively
+- [x] Canonical assignments own name, job, department, archetype, zone, position, movement style, and executive-threat role
+- [x] Mr Purple is the only executive threat and is spawned from the canonical assignment
+- [x] Workday profiles are now derived from canonical staff profiles instead of a second invented table
+- [x] Legacy `Roster` and `WorkerProfiles` remain compatibility facades only; they are no longer authoritative
+- [x] Added canonical roster count invariants: 19 coworkers plus Agent Red, with one Mr Purple
+- [x] Replaced stale chat and boss display references to Keith/Briggs-era identities
+- [ ] Procedural replacements must persist as assignment records rather than only persona sheets
+- [ ] Level Designer export still needs to serialize canonical staff assignments and authored waypoints
+- [ ] Godot runtime capture remains pending until the local Mono assembly startup blocker is resolved
+
+### CYCLE 24 — cross-codebase source-of-truth audit (IMPLEMENTED, runtime capture pending)
+- [x] Audited the Godot runtime, C# data layers, React level designer, and exported schemas
+- [x] Added explicit staff assignment and waypoint collections to the workshop document
+- [x] Bumped the workshop/Godot export contract to version 2
+- [x] Godot export now groups floors, staff, and waypoints while retaining top-level indexes
+- [x] Legacy imports normalize missing v1 staff/waypoint fields to empty collections
+- [x] Runtime validates canonical roster invariants before constructing the world
+- [x] Invalid canonical roster state now fails loudly instead of silently spawning a drifted office
+- [ ] Add visible level-designer assignment UI for canonical staff and waypoint tagging
+- [ ] Load exported workshop v2 documents into Godot runtime instead of fixed starter placement
+- [ ] Persist procedural replacements as canonical assignment records
+- [ ] Godot runtime capture remains pending until the local Mono assembly startup blocker is resolved
+
+### CYCLE 25 — full verification and purity audit (IN PROGRESS)
+- [x] C# project build passes with zero warnings and errors
+- [x] Frontend TypeScript/Vite production build passes
+- [x] Diff whitespace validation passes
+- [x] Canonical roster static checks pass: 19 coworkers, 20 total, one Mr Purple threat
+- [x] Fixed render-time `Math.random()` in the shared sidebar skeleton
+- [ ] Existing generated UI lint rule violations remain: component files export both primitives and constants
+- [ ] Add a dedicated Godot importer for workshop v2 staff/waypoint assignments
+- [ ] Complete headless capture once the local Mono assembly blocker is resolved
+
+### CYCLE 26 — Workshop v2 authored geometry importer (IMPLEMENTED, runtime capture pending)
+- [x] Added runtime parsing for exported floor elements, including walls, glass walls, rooms, cubicles, doors, and gameplay props
+- [x] Imported elements generate visible placeholder geometry and runtime collision boxes
+- [x] Imported walls, glass walls, rooms, cubicles, and doors contribute to line-of-sight blocking
+- [x] Imported waypoints use the same documented grid-to-world transform as authored staff positions
+- [x] Imported staff assignments override canonical spawn positions without changing canonical identity
+- [x] Invalid or missing Workshop JSON falls back to the canonical starter layout
+- [x] Workshop element IDs, staff names, waypoint IDs, and capacity values are validated before use
+- [ ] Imported access-card metadata still needs to feed the runtime door/keycard registry
+- [ ] Imported multi-floor geometry needs floor-aware runtime scene partitioning and elevator routing
+- [ ] Godot runtime capture remains pending until the local Mono assembly startup blocker is resolved
+
+### CYCLE 27 — authored access binding and designer assignment tools (IMPLEMENTED, runtime capture pending)
+- [x] Workshop v2 now parses access-card records and validates referenced card IDs
+- [x] Imported doors, terminals, elevators, and stairwells bind to stable workshop element IDs
+- [x] Bound runtime objects require the exported access card before unlocking
+- [x] Level Designer can add canonical staff assignment records to an active floor
+- [x] Level Designer can add waypoint records for authored NPC navigation
+- [x] Export retains staff, waypoints, geometry, and access cards in one Workshop v2 document
+- [ ] Staff/waypoint inspector editing needs a richer selected-record panel
+- [ ] Runtime imported geometry needs floor-aware elevator routing
+- [ ] Godot runtime capture remains pending until the local Mono assembly startup blocker is resolved
+
+### CYCLE 28 — staff and waypoint authoring inspector (IMPLEMENTED, runtime capture pending)
+- [x] Added selectable staff markers and waypoint markers to the level canvas
+- [x] Added canonical staff selection and department editing
+- [x] Added staff floor position, home-element, and executive-threat controls
+- [x] Added waypoint label, grid position, capacity, visibility, social value, and cover value editing
+- [x] Added comma-separated waypoint tag editing for runtime navigation utility
+- [x] Added deletion for staff assignments and waypoints
+- [x] Maintained canonical staff identity constraints in the editor
+- [x] Frontend and C# builds pass after the inspector pass
+- [ ] Add staff/waypoint drag handles and richer tag pickers
+- [ ] Add runtime elevator routing for multi-floor assignments
+- [ ] Godot visual capture remains pending until the local Mono assembly startup blocker is resolved
+
+### CYCLE 29 — full-codebase regression and importer ordering audit (IMPLEMENTED, runtime capture pending)
+- [x] Re-ran frontend and Godot builds after the inspector/importer changes
+- [x] Fixed duplicated Workshop geometry caused by top-level and per-floor element exports
+- [x] Added project-local `res://workshop.json` fallback for repeatable developer testing
+- [x] Ensured imported geometry is applied before World collision/vision indexing
+- [x] Preserved canonical fallback when no valid Workshop document exists
+- [x] Verified canonical roster count and removed legacy runtime spawn dependency
+- [ ] Add a checked-in sample `workshop.json` fixture once level layout is approved
+- [ ] Complete Godot runtime capture after the local Mono startup blocker is resolved
+
+### CYCLE 30 — multi-floor navigation logic (IMPLEMENTED, runtime capture pending)
+- [x] Added floor-aware navigation registry with stable floor IDs
+- [x] Added elevator/stair floor links generated from Workshop v2 elements
+- [x] Added required-card checks for vertical transitions
+- [x] Added NPC floor identity and transition timers
+- [x] Added denied-transition consequence stimuli instead of silent teleportation
+- [x] Added floor validation for imported staff, waypoints, elements, and links
+- [x] Preserved single-floor fallback when no Workshop level is loaded
+- [ ] Add authored destination floor to routine beats instead of only same-floor waypoints
+- [ ] Add player elevator/stair interaction and visible floor transfer
+- [ ] Add floor-aware collision partitions so inactive floors do not block active-floor movement
+- [ ] Godot visual capture remains pending until the local Mono assembly startup blocker is resolved
+
+### CYCLE 31 — multi-floor follow-up hardening (IMPLEMENTED, runtime capture pending)
+- [x] Replaced one-way vertical links with explicit bidirectional elevator/stair links
+- [x] Links now connect adjacent Workshop floors deterministically instead of choosing an arbitrary floor
+- [x] Added optional authored `floorLinks` records for explicit transition pairing
+- [x] Added floor-link validation for missing floors and elements
+- [x] NPCs retain their source floor until the transition timer completes
+- [x] Removed unsafe global active-floor mutation; multiple NPCs may occupy different floors logically
+- [x] Added Level Designer `Link floor` authoring action using placed elevators/stairs
+- [x] Added Workshop v2 export/import support for floor links
+- [ ] Player elevator/stair interaction still needs a visible transition implementation
+- [ ] Navigation needs pathfinding/route chaining for more than one floor apart
+- [ ] Runtime capture remains pending until the local Mono assembly startup blocker is resolved
+
 ## Backlog (next cycles, priority order)
 
 1. Physics props: grabbable papers/mugs/staplers, throwable with noise events ✅ (cycle 4)
@@ -236,7 +358,44 @@ fun-per-line-of-code. This file is the loop's persistent state.
 - [x] OFFICE_OBJECT_CATALOG.md documents all 50 objects, state sets, triggers, reactions, and visual replacement rules
 - [ ] Godot runtime object-state movie capture remains pending until the local Mono assembly startup blocker is resolved
 
-### CYCLE 18 — spatial object-state activation (IMPLEMENTED)
+### CYCLE 21 — canonical 20-character office cast and job-specific consequence hooks (IMPLEMENTED, runtime capture pending)
+- [x] Replaced the invented roster with Agent Red plus the canonical 19 NPCs: Bob, Sleepy Steve, Pam, Mr Purple, Fran, Chad, Rita, Mailroom Mike, Dave, Liz, Nervous Ned, Manager Mo, Jen, Data Dave, Boring Bill, Boss Barbara, Joe, Kevin, and Old Tom
+- [x] Added canonical jobs, departments, appearance hooks, behavioral hooks, useful access, and RPG consequences
+- [x] Added job-specific observation channels: numbers, technology, HR, executive presence, finance, visitors, deliveries, documentation, visual evidence, panic, calendars, network patterns, inventory, maintenance, and institutional memory
+- [x] Mr Purple is now the CEO and roaming boss; Boss Barbara and Manager Mo remain management/social threats with different specialties
+- [x] Connected observation specialties to consequence activation with bounded relevance multipliers
+- [x] STAFF directory now shows canonical job, department, observation specialties, and RPG hook
+- [x] Added CANONICAL_STAFF.md as the source of truth for future level-designer staff assignments
+- [x] Sanity-checked the cast for fun: every NPC creates a different opportunity or comedy hazard without adding a player-facing meter
+- [ ] Godot runtime canonical-cast capture remains pending until the local Mono assembly startup blocker is resolved
+
+### CYCLE 20 — authored working day, departments, and boss sentinel (IMPLEMENTED, runtime capture pending)
+- [x] Expanded the starting roster to 20 total staff: Agent Red plus 19 canonical coworkers
+- [x] Added authored job and department profiles for the starting cast
+- [x] Added personality-based movement styles: desk anchor, fidgeter, social butterfly, errand runner, snack seeker, and coffee seeker
+- [x] Added department-specific routine beats so shared departments can move to meetings together
+- [x] Added authored behavior examples from the canonical cast: Sleepy Steve seeks coffee, Kevin checks inventory, Joe runs maintenance routes, and Chad creates social distractions
+- [x] Added level-designer destination contract for desk, break, printer, server, closet, reception, meeting, and HR waypoints
+- [x] Added boss difficulty profiles: Easy spends about 80% of the day at his desk, Standard patrols half the day, Hard stays mobile
+- [x] Boss pursuit now uses delayed, time-limited area hints from the last seen position rather than perfect player tracking
+- [x] Added computer-driven department meeting scheduling; Accounts can be called to Meeting Room A at 3 PM
+- [x] Added deterministic `++ capture workday_social` for a synchronized Accounts meeting and staff-directory inspection
+- [x] Sanity-checked the loop for fun: routines create openings, boss pressure is readable, and no NPC is omniscient
+- [ ] Godot runtime workday-social capture remains pending until the local Mono assembly startup blocker is resolved
++
++### CYCLE 19 — fun-first social metrics and timed attitudes (IMPLEMENTED, runtime capture pending)
++- [x] Logged the three visible player metrics: Suspicion, Loyalty, and Work
++- [x] Added derived Company Trust and Company Threat without exposing extra player meters
++- [x] Added named action profiles for visible work, missed work, taking credit, blaming, reporting, framing, cleanup, access, and major crimes
++- [x] Added bounded NPC attitudes with immediate reaction, active duration, shift memory, and lightweight campaign-memory guidance
++- [x] NPC attitudes decay over time and can be shortened by help, comfort, visible work, explanations, credit-giving, or co-op distraction
++- [x] Player profile remains forgiving: suspicion recovers slowly, work has an idle grace period, and one mistake cannot hard-fail a shift
++- [x] STAFF directory exposes the three player metrics and each NPC's current attitude strength and remaining duration
++- [x] Added deterministic `++ capture profile` choreography for visible work, credit-taking, framing/reporting, recovery, and profile inspection
++- [x] Sanity-checked the model against friend-slop goals: deep simulation underneath, readable reactions on top, no spreadsheet-required play
++- [ ] Godot runtime profile capture remains pending until the local Mono assembly startup blocker is resolved
++
++### CYCLE 18 — spatial object-state activation (IMPLEMENTED)
 - [x] Object-state stimuli use each state's configured radius as a hard NPC reaction boundary
 - [x] The same configured radius controls activation falloff; no fixed global object radius remains
 - [x] Active NPC object users may react to their own printer, computer, or service-object state outside the ambient radius
