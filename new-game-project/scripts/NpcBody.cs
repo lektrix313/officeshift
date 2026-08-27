@@ -25,6 +25,7 @@ public partial class NpcBody : Node3D
 
     private string _idleClip = "";
     private string _walkClip = "";
+    private string _runClip = "";
     private string _workdayClip = "";
     private string _currentClip = "";
     private bool _runRequest;
@@ -103,6 +104,7 @@ public partial class NpcBody : Node3D
                 Anim = null;
                 _idleClip = "";
                 _walkClip = "";
+                _runClip = "";
                 _workdayClip = "";
                 _currentClip = "";
                 BuildModel();
@@ -173,19 +175,29 @@ public partial class NpcBody : Node3D
                     ? (AnimationPlayer)model.FindChildren("*", "AnimationPlayer", true)[0]
                     : null;
 
-                if (Anim != null)
+                // If model has no AnimationPlayer or no clips, create one and inject shared animations
+                AnimationLib.EnsureLoaded();
+                if (Anim == null)
                 {
-                    foreach (string clip in Anim.GetAnimationList())
-                    {
-                        string low = clip.ToLowerInvariant();
-                        if (_idleClip.Length == 0 && low.Contains("idle")) _idleClip = clip;
-                        if (_walkClip.Length == 0 && low.Contains("walk") && !low.Contains("idle")) _walkClip = clip;
-                    }
-                    if (_idleClip.Length > 0)
-                    {
-                        Anim.Play(_idleClip);
-                        _currentClip = _idleClip;
-                    }
+                    Anim = new AnimationPlayer();
+                    model.AddChild(Anim);
+                }
+                int injected = AnimationLib.InjectClips(Anim);
+                if (injected > 0)
+                    GD.Print($"[NpcBody] {DisplayName}: injected {injected} shared animation clips");
+
+                // Scan for usable clips (model's own clips take priority over injected ones)
+                foreach (string clip in Anim.GetAnimationList())
+                {
+                    string low = clip.ToLowerInvariant();
+                    if (_idleClip.Length == 0 && low.Contains("idle")) _idleClip = clip;
+                    if (_walkClip.Length == 0 && low.Contains("walk") && !low.Contains("idle")) _walkClip = clip;
+                    if (_runClip.Length == 0 && low.Contains("run")) _runClip = clip;
+                }
+                if (_idleClip.Length > 0)
+                {
+                    Anim.Play(_idleClip);
+                    _currentClip = _idleClip;
                 }
                 return;
             }
@@ -234,9 +246,17 @@ public partial class NpcBody : Node3D
     {
         _runRequest = run;
         if (Anim == null || !UsingRiggedModel) return;
-        string target = moving && _walkClip.Length > 0
-            ? _walkClip
-            : _workdayClip.Length > 0 ? _workdayClip : _idleClip;
+        string target;
+        if (moving)
+        {
+            if (run && _runClip.Length > 0) target = _runClip;
+            else if (_walkClip.Length > 0) target = _walkClip;
+            else target = _idleClip;
+        }
+        else
+        {
+            target = _workdayClip.Length > 0 ? _workdayClip : _idleClip;
+        }
         if (target.Length == 0 || target == _currentClip) return;
         if (Anim.HasAnimation(target))
         {
@@ -268,7 +288,7 @@ public partial class NpcBody : Node3D
         if (Anim == null) return "";
         string[] tokens = state switch
         {
-            WorkdayState.WalkingToPrinter or WorkdayState.MeetingWalk or WorkdayState.WalkingThinking or WorkdayState.AnxiousWalking => new[] { "walk" },
+            WorkdayState.WalkingToPrinter or WorkdayState.MeetingWalk or WorkdayState.WalkingThinking or WorkdayState.AnxiousWalking => new[] { "walk", "strafe" },
             WorkdayState.WorkingAtDesk or WorkdayState.DepressedWorking or WorkdayState.HappyWorking or WorkdayState.WorriedWorking or WorkdayState.DistractedWorking or WorkdayState.AnnoyedWorking or WorkdayState.PickingUpSlack or WorkdayState.SuspiciousWorking or WorkdayState.NotPayingAttention or WorkdayState.EngrossedWorking or WorkdayState.AnxiousWorking => new[] { "work", "typing", "write", "idle" },
             WorkdayState.Reading => new[] { "read", "book", "idle" },
             WorkdayState.WaitingAtPrinter or WorkdayState.Printing or WorkdayState.PrinterBroken => new[] { "print", "work", "idle" },
@@ -276,7 +296,8 @@ public partial class NpcBody : Node3D
             WorkdayState.PhoneCall => new[] { "phone", "talk", "idle" },
             WorkdayState.PanicAttack => new[] { "panic", "idle" },
             WorkdayState.OnBreak or WorkdayState.WaterCooler or WorkdayState.CoffeeBreak or WorkdayState.Meeting or WorkdayState.AnxiousMeeting => new[] { "talk", "idle" },
-            WorkdayState.Speed or WorkdayState.Ecstasy => new[] { "run", "walk", "idle" },
+            WorkdayState.Speed or WorkdayState.Ecstasy => new[] { "run", "walk", "strafe", "idle" },
+            WorkdayState.Arriving => new[] { "walk", "idle" },
             _ => new[] { "idle" },
         };
         foreach (string clip in Anim.GetAnimationList())

@@ -454,3 +454,13 @@ fun-per-line-of-code. This file is the loop's persistent state.
 - [x] BuildModel resolves character-specific path via DisplayName before loading
 - [x] Init() rebuilds visuals if character-specific model available and node is already in tree
 - [x] C# build: 0 errors, 0 warnings
+
+### CYCLE 35 — Shared animation library (IMPLEMENTED)
+- [x] Created AnimationLib static class that discovers FBX animations from assets/animations/
+- [x] Loads idle, walking, running, strafe, turn animations from Mixamo FBX files
+- [x] Injects shared clips into any NPC AnimationPlayer that lacks its own clips
+- [x] Character-specific models (AgentX, Bob, Steve, Ned, Purple) now get shared animations
+- [x] Updated SetMoving to support run clips (Speed/Ecstasy states)
+- [x] Updated FindWorkdayClip token matching for strafe and turn animations
+- [x] AnimationLibrary-based injection (Godot 4 compatible)
+- [x] C# build: 0 errors, 0 warnings
