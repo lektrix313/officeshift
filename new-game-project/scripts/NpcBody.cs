@@ -2,7 +2,7 @@
 
 /// <summary>
 /// Visual + presentation layer for one NPC (port of npc.ts NPC class).
-/// Owns: soldier.glb instance (tinted per archetype), name Label3D,
+/// Owns: character-specific GLB or soldier.glb fallback (tinted per archetype), name Label3D,
 /// suspicion bar, text emotes, sleeping indicator, idle/walk animation,
 /// primitive fallback when the GLB is unavailable. Runtime-constructed only.
 /// Layout: root (position + yaw) -> Visual child (KO pose rotates this);
@@ -87,14 +87,55 @@ public partial class NpcBody : Node3D
         Arch = arch;
         Spec = Specs.Table[arch];
         Name = $"Npc_{name}";
+
+        // If _Ready already fired (node in tree) and we have a character-specific model,
+        // rebuild the visual so the correct character loads.
+        if (Visual != null && IsInsideTree())
+        {
+            string modelPath = ResolveModelPath();
+            if (modelPath != DefaultModel)
+            {
+                // Clear old visuals
+                foreach (var child in Visual.GetChildren())
+                    child.QueueFree();
+                UsingRiggedModel = false;
+                Skeleton = null;
+                Anim = null;
+                _idleClip = "";
+                _walkClip = "";
+                _workdayClip = "";
+                _currentClip = "";
+                BuildModel();
+            }
+        }
     }
 
     // ---------- model ----------
 
+    /// <summary>Canonical staff name → character-specific GLB. Falls back to soldier.glb.</summary>
+    private static readonly System.Collections.Generic.Dictionary<string, string> CharacterModels = new()
+    {
+        ["Agent Red"] = "res://assets/models/AgentX.glb",
+        ["Bob"] = "res://assets/models/Bob.glb",
+        ["Sleepy Steve"] = "res://assets/models/Sleepy Steve.glb",
+        ["Nervous Ned"] = "res://assets/models/Nervous+Ned.glb",
+        ["Mr Purple"] = "res://assets/models/BossmanT-Pose.fbx",
+    };
+
+    private static readonly string DefaultModel = "res://assets/models/soldier.glb";
+
+    private string ResolveModelPath()
+    {
+        if (!string.IsNullOrEmpty(DisplayName) && CharacterModels.TryGetValue(DisplayName, out var path))
+            return path;
+        return DefaultModel;
+    }
+
     private void BuildModel()
     {
+        string modelPath = ResolveModelPath();
         PackedScene? glb = null;
-        try { glb = ResourceLoader.Load<PackedScene>("res://assets/models/soldier.glb"); }
+        try { glb = ResourceLoader.Load<PackedScene>(modelPath); }
         catch { /* fall through to primitives */ }
 
         if (glb != null)

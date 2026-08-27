@@ -446,3 +446,11 @@ fun-per-line-of-code. This file is the loop's persistent state.
 - [x] C# build: 0 errors, 0 warnings
 - [x] Frontend build: passed
 - [ ] Godot runtime capture remains pending until the local Mono assembly startup blocker is resolved
+
+### CYCLE 34 — Character-specific model loading (IMPLEMENTED)
+- [x] Added character model registry mapping canonical names to specific GLB/FBX files
+- [x] Agent Red → AgentX.glb, Bob → Bob.glb, Sleepy Steve → Sleepy Steve.glb, Nervous Ned → Nervous+Ned.glb, Mr Purple → BossmanT-Pose.fbx
+- [x] All other NPCs fall back to soldier.glb with archetype tinting
+- [x] BuildModel resolves character-specific path via DisplayName before loading
+- [x] Init() rebuilds visuals if character-specific model available and node is already in tree
+- [x] C# build: 0 errors, 0 warnings
