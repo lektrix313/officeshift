@@ -480,3 +480,36 @@ fun-per-line-of-code. This file is the loop's persistent state.
 - [x] Category tabs now show 7 groups: structure, rooms, furniture, tech, breakroom, vertical, dressing
 - [x] Frontend build: 0 errors
 - [x] C# build: 0 errors, 0 warnings
+
+### CYCLE 37 — 3D office geometry renderer (IMPLEMENTED)
+- [x] Created OfficeRenderer.cs with type-specific 3D mesh generation for all 46 element types
+- [x] Walls: proper height, baseboards, top trim
+- [x] Glass walls: transparent panels with frame edges
+- [x] Doors: frame, panel, handle, keycard reader with LED
+- [x] Windows: glass pane with cross-bar and frame
+- [x] Rooms: floor plane per type (carpet/tile colors) + ceiling light strip
+- [x] Desks: surface, legs, drawer unit
+- [x] Terminal desks: desk + monitor + keyboard + screen glow
+- [x] Chairs: seat, backrest, pole, wheels
+- [x] Printers: body, paper tray, output tray, status LED
+- [x] Meeting tables: top, center support, corner legs
+- [x] Whiteboards: board, frame, marker tray
+- [x] Bookshelves: frame, shelves, colored book blocks
+- [x] Filing cabinets: body, 3 drawers with handles
+- [x] Sofas: seat, backrest, armrests
+- [x] Server racks: body, rack units with status LEDs
+- [x] Safes: body, door, handle, combination dial
+- [x] Monitors: screen, glow, stand, base
+- [x] TV screens: panel, glow, wall mount
+- [x] Vending machines: body, glass front, product rows, dispensing slot
+- [x] Coffee machines: body, cup area, steam indicator
+- [x] Water coolers: body, water bottle, drip tray
+- [x] Stairs: ascending steps with railing
+- [x] Elevators: shaft walls, sliding doors, floor indicator
+- [x] Plants: pot, soil, foliage layers
+- [x] Fire extinguishers: cylinder, handle, nozzle
+- [x] Coat racks: pole, base, 4 hooks
+- [x] Material system: per-type colors, glass transparency, emissive glow, material cache
+- [x] Collision generated for solid gameplay elements
+- [x] Wired into World.ApplyWorkshopGeometry replacing generic box renderer
+- [x] C# build: 0 errors, 0 warnings

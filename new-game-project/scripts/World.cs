@@ -25,19 +25,23 @@ public partial class World : Node3D
     {
         if (_workshopGeometryLoaded) return;
         _workshopGeometryLoaded = true;
+
+        // Render each element with type-specific 3D geometry
         foreach (var element in workshop.Elements)
         {
-            float x = originX + (element.X + element.Width / 2f) * worldScale;
-            float z = originZ + (element.Y + element.Height / 2f) * worldScale;
-            float width = MathF.Max(.25f, element.Width * worldScale);
-            float depth = MathF.Max(.25f, element.Height * worldScale);
-            bool wall = element.Type is "wall" or "glass-wall" or "office" or "cubicle";
+            OfficeRenderer.RenderElement(this, element, worldScale, originX, originZ);
+
+            // Collision for solid gameplay elements
+            float cx = originX + (element.X + element.Width / 2f) * worldScale;
+            float cz = originZ + (element.Y + element.Height / 2f) * worldScale;
+            float w = MathF.Max(.25f, element.Width * worldScale);
+            float d = MathF.Max(.25f, element.Height * worldScale);
+            bool wall = element.Type is "wall" or "glass-wall" or "glass-partition" or "office" or "cubicle"
+                or "meeting-room" or "server-room" or "break-room" or "bathroom" or "storage-closet"
+                or "executive-office" or "reception";
             bool solid = element.Gameplay && element.Type is not "plant";
-            bool blocksVision = wall || element.Type is "door";
-            float height = element.Type is "wall" or "glass-wall" ? WorldData.WallHeight : element.Type is "office" or "cubicle" ? 1.4f : .8f;
-            if (element.Type == "door") { width = .35f; depth = MathF.Max(1f, depth); }
-            AddBlockoutBox(x, height / 2f, z, width, height, depth, element.Type == "glass-wall" ? Color.FromHtml("79b9cc") : wall ? Color.FromHtml("d8d4cc") : Color.FromHtml("8a7860"), solid, element.Type == "glass-wall");
-            if (solid) AddRuntimeCollider(x, z, width, depth, blocksVision);
+            bool blocksVision = wall || element.Type is "door" or "keycard-door";
+            if (solid) AddRuntimeCollider(cx, cz, w, d, blocksVision);
         }
         AddWorkshopWaypoints(workshop.Waypoints, worldScale, originX, originZ);
     }
