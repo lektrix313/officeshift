@@ -316,6 +316,28 @@ public partial class GameMode : Node3D
         PlayerProfile.Tick(dt, visiblyWorking);
         foreach (var npc in Npcs) npc.TickAttitude(dt);
         TickOfficeObjects(dt);
+
+        // ---- stench system (hidden body decomposition) ----
+        var stenchResult = StenchTracker.Tick(dt, _shiftElapsed);
+        if (stenchResult.InvestigationTriggered)
+        {
+            EndGame(false, $"The smell of {stenchResult.TriggerBody?.NpcName ?? "decay"} reached the CEO's office. Fire alarm. Investigation. Everyone is searched. Game over.");
+            return;
+        }
+        foreach (var (pos, radius, _) in stenchResult.AffectedPositions)
+        {
+            foreach (var npc in Npcs)
+            {
+                float dist = npc.Body.Position.DistanceTo(pos);
+                if (dist < radius)
+                {
+                    float stench = StenchTracker.StenchAt(npc.Body.Position, _shiftElapsed);
+                    if (stench > 0.6f) npc.AddSuspicion(2f * dt);
+                    else if (stench > 0.3f) npc.AddSuspicion(0.5f * dt);
+                }
+            }
+        }
+
         VendingCooldown = System.MathF.Max(0f, VendingCooldown - dt);
         PhoneCooldown = System.MathF.Max(0f, PhoneCooldown - dt);
         AlarmCooldown = System.MathF.Max(0f, AlarmCooldown - dt);
