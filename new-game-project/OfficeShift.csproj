@@ -10,4 +10,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>12</LangVersion>
   </PropertyGroup>
+  <!-- standalone gauntlet harnesses: their own entry points and Godot shims must not
+       be compiled into the game assembly -->
+  <ItemGroup>
+    <Compile Remove="test/**/*.cs" />
+  </ItemGroup>
 </Project>

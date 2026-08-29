@@ -11,6 +11,8 @@ using System.Linq;
 /// </summary>
 public partial class GameMode : Node3D
 {
+    private static readonly Color CoolOfficeLight = Color.FromHtml("dce8ff");
+
     public static GameMode? Instance { get; private set; }
 
     public World? WorldRef { get; private set; }
@@ -34,6 +36,11 @@ public partial class GameMode : Node3D
     public PlayerConsequenceProfile PlayerProfile { get; } = new();
     public BossDifficulty BossDifficulty { get; set; } = BossDifficulty.Easy;
     public SocialSimulation Social { get; } = new();
+    /// <summary>Directed opinions + beliefs: who thinks what about whom. See SocialLedger.cs.</summary>
+    public SocialLedger Ledger { get; } = new();
+    private readonly CarnageSynthesizer _carnage = new();
+    private readonly Dictionary<string, float> _socialCooldown = new();
+    private readonly Dictionary<string, SocialDirective> _activeDirective = new();
     public MultiFloorNavigation Navigation { get; } = new();
     public bool UIOpen;
     public bool StinkActive => WorldEvents.StinkActive;
@@ -69,6 +76,7 @@ public partial class GameMode : Node3D
 
     public OmniPortal? Portal { get; private set; }
     public TalkOverlay? Talk { get; private set; }
+    public DevMenu? DeveloperMenu { get; private set; }
 
     private float _chatterTimer = 9f;
     private float _gossipTimer = 7f;
@@ -96,10 +104,20 @@ public partial class GameMode : Node3D
         public int Bonks, Hides, Reports, Disguises, Cleans;
     }
 
+    [Export] public Color KeyLightColor { get; set; } = Color.FromHtml("fff2dd");
+    [Export(PropertyHint.Range, "0,3,0.05")] public float KeyLightEnergy { get; set; } = 0.9f;
+    [Export(PropertyHint.Range, "0,2,0.05")] public float AmbientEnergy { get; set; } = 0.55f;
+    [Export(PropertyHint.Range, "0,2,0.05")] public float ReflectionGlow { get; set; } = 0.18f;
+    [Export] public bool WarmOfficeLighting { get; set; } = true;
+    [Export] public bool CoolServerLighting { get; set; } = true;
+
     public override void _Ready()
     {
         Instance = this;
         MissionManager.LoadAll();
+        // one-line boot signal for the mail/NPC LLM, so a missing key or a dead model is
+        // obvious in the console instead of silently degrading to the offline persona table
+        GD.Print($"[ChatService] {NpcChatService.ProviderStatus} ({NpcChatService.ConfigurationHint})");
 
         // ---- environment / lighting (port of init()) ----
         var env = new Godot.Environment
@@ -111,15 +129,29 @@ public partial class GameMode : Node3D
             FogDensity = 0.012f,
             AmbientLightSource = Godot.Environment.AmbientSource.Color,
             AmbientLightColor = Color.FromHtml("cfd8ff"),
-            AmbientLightEnergy = 0.55f,
+            AmbientLightEnergy = AmbientEnergy,
+            ReflectedLightSource = Godot.Environment.ReflectionSource.Sky,
+            GlowEnabled = true,
+            GlowIntensity = ReflectionGlow,
+            SsaoEnabled = true,
+            SsaoRadius = 2.2f,
+            SsaoIntensity = 1.15f,
+            SsilEnabled = true,
+            SsilRadius = 2.5f,
+            SsilIntensity = 0.35f,
+            TonemapMode = Godot.Environment.ToneMapper.Filmic,
+            TonemapExposure = 1.05f,
+            TonemapWhite = 1.1f,
         };
         AddChild(new WorldEnvironment { Environment = env });
 
         var sun = new DirectionalLight3D
         {
-            LightColor = Color.FromHtml("fff2dd"),
-            LightEnergy = 0.9f,
+            LightColor = WarmOfficeLighting ? KeyLightColor : CoolOfficeLight,
+            LightEnergy = KeyLightEnergy,
             ShadowEnabled = true,
+            DirectionalShadowMaxDistance = 80f,
+            LightAngularDistance = 0.35f,
         };
         sun.RotationDegrees = new Vector3(-52, 32, 0);
         AddChild(sun);
@@ -204,6 +236,7 @@ public partial class GameMode : Node3D
             var brain = NpcBrain.Create(body, assignment.Zone);
             brain.SetFloor(authored?.FloorId ?? "floor-1");
             brain.InitializeWorkday(rosterIndex++);
+            brain.AssignDesk(WorldData.DeskAssignments.TryGetValue(brain.NpcName, out var assignedDesk) ? assignedDesk : $"pod:{rosterIndex - 1}");
             Social.RegisterNpc(brain.NpcName, rosterIndex);
             Npcs.Add(brain);
         }
@@ -229,6 +262,15 @@ public partial class GameMode : Node3D
         Guard = NpcBrain.Create(gBody, "guard");
         Guard.PauseTimer = 2f;
         Npcs.Add(Guard);
+        // seed everyone's opinion of everyone else before the shift starts
+        Ledger.Register(Npcs.Select(n => n.NpcName));
+        AnimDiag.Detect();
+        SocialSmoke.Detect();
+        if (SocialSmoke.Enabled)
+        {
+            Started = true;                 // headless has no player to clock in
+            SocialSmoke.Plant(this);
+        }
 
         // wire player FX events
         Player.StainMopped += OnStainMopped;
@@ -253,6 +295,14 @@ public partial class GameMode : Node3D
         AddChild(Portal);
         Talk = new TalkOverlay { Name = "Talk" };
         AddChild(Talk);
+        DeveloperMenu = new DevMenu { Name = "DeveloperMenu" };
+        AddChild(DeveloperMenu);
+    }
+
+    public override void _UnhandledInput(InputEvent e)
+    {
+        if (e is InputEventKey key && key.Pressed && !key.Echo && key.Keycode == Key.F10 && !UIOpen)
+            DeveloperMenu?.Toggle();
     }
 
     public override void _Input(InputEvent e)
@@ -274,6 +324,8 @@ public partial class GameMode : Node3D
         }
     }
 
+    public override void _ExitTree() => SocialSmoke.Report();
+
     public override void _Process(double delta)
     {
         float dt = (float)System.Math.Min(delta, 0.05);
@@ -284,7 +336,9 @@ public partial class GameMode : Node3D
             return;
         }
 
-        if (!Started || Player == null || Input.MouseMode != Input.MouseModeEnum.Captured)
+        // headless smoke runs have no captured mouse; everything else is unchanged
+        if (!Started || Player == null ||
+            (Input.MouseMode != Input.MouseModeEnum.Captured && !SocialSmoke.Enabled))
         {
             PushHud(); // start/pause screens stay responsive
             return;
@@ -442,6 +496,7 @@ public partial class GameMode : Node3D
         };
         NpcBrain.SetTickRefs(Npcs, Player);
         Social.Tick(Npcs, (float)dt, WorkdayBalance.WorkdayStartHour + _shiftElapsed / (Bal.ShiftSeconds / 8f));
+        TickInterpersonal((float)dt);
         TickMultiFloorRoutes((float)dt);
         AiDirector.Tick(Npcs, ctx, dt);
         if (Guard != null) AiDirector.GuardTick(Guard, ctx, dt);
@@ -554,6 +609,7 @@ public partial class GameMode : Node3D
         // ---- live "player" directive follow + persona chat results ----
         foreach (var n in Npcs)
         {
+            if (!n.Awake) continue;
             if (n.DirectiveZone == "player" && n.DirectiveTimer > 0)
                 n.DirectiveTarget = Player.FeetPos;
         }
@@ -609,6 +665,23 @@ public partial class GameMode : Node3D
         while (diff < -System.MathF.PI) diff += System.MathF.Tau;
         if (System.MathF.Abs(diff) > n.Spec.Fov) return false;
         return !WorldRef!.LosBlocked(n.Pos, target);
+    }
+
+    /// <summary>Diagnostic: why can this NPC not see that point? Range, facing, or geometry.</summary>
+    public string SightReport(NpcBrain n, Vector3 target)
+    {
+        if (!n.Awake) return "asleep/out";
+        if (n.State == NpcState.Seated) return "seated(dozing)";
+        float dx = target.X - n.Pos.X, dz = target.Z - n.Pos.Z;
+        float dist = MathF.Sqrt(dx * dx + dz * dz);
+        float range = n.Spec.Range * (Player != null && Player.Crouching ? Bal.CrouchVisionMul : 1f);
+        if (dist > range) return $"out of range (d={dist:F1} > {range:F1})";
+        float diff = MathF.Atan2(dx, dz) - n.Body.Facing;
+        while (diff > MathF.PI) diff -= MathF.Tau;
+        while (diff < -MathF.PI) diff += MathF.Tau;
+        if (MathF.Abs(diff) > n.Spec.Fov) return $"outside FOV (off by {Mathf.RadToDeg(MathF.Abs(diff)):F0}deg, fov={Mathf.RadToDeg(n.Spec.Fov):F0}deg)";
+        if (WorldRef!.LosBlocked(n.Pos, target)) return $"line of sight blocked (d={dist:F1})";
+        return $"SEES IT (d={dist:F1})";
     }
 
     public void Toast(string msg, ToastKind kind = ToastKind.Info) => Hud?.Toast(msg, kind);
@@ -702,6 +775,9 @@ public partial class GameMode : Node3D
         NpcReactionAction preferredAction = NpcReactionAction.Observe,
         NpcBrain? activeUser = null)
     {
+        // Ambient/runtime events must have a living, visible owner. Player-led events
+        // may remain source-less because the player is the author.
+        if (!playerLed && source != null && !source.Awake) return;
         _stimuli.Add(new NpcStimulus
         {
             Id = $"{kind}:{_shiftElapsed:F2}:{_stimuli.Count}",
@@ -1096,6 +1172,7 @@ public partial class GameMode : Node3D
             if (!seen) continue;
             if (Player.DisguiseOf != null) Player.BlowDisguise();
         }
+        WitnessPlayerCrime(victim.Pos, ClaimKind.Assault, victim);
     }
 
     /// <summary>Port of hideBodyIn(): occupants, Hidden state, investigation shrug-offs, gag props.</summary>
@@ -1233,6 +1310,34 @@ public partial class GameMode : Node3D
             bool seen = CanSee(w, victim.Pos) || dist < Bal.WitnessAutoSeeDist;
             if (!seen) continue;
             if (Player.DisguiseOf != null) Player.BlowDisguise();
+        }
+        WitnessPlayerCrime(victim.Pos, ClaimKind.Assault, victim);
+    }
+
+    /// <summary>
+    /// Bridges the physical game into the social ledger. Without this the opinion system only
+    /// ever hears about the player through typed gossip -- you could floor someone in front of
+    /// the whole floor and nobody would form a single belief about you.
+    /// Confidence falls off with distance, so a witness across the room is less certain.
+    /// </summary>
+    public void WitnessPlayerCrime(Vector3 where, ClaimKind kind, NpcBrain? exclude = null)
+    {
+        if (Player == null) return;
+        foreach (var w in Npcs)
+        {
+            if (w == exclude || !w.Awake || w == Guard) continue;
+            float dist = w.Pos.DistanceTo(where);
+            bool saw = CanSee(w, where) || dist < Bal.WitnessAutoSeeDist;
+            bool heard = dist < Bal.CrimeHearDist;
+            if (!saw && !heard) continue;
+
+            var claim = Ledger.Tell(w.NpcName, MailStore.PlayerAddress, kind, "witnessed");
+            if (claim == null) continue;
+            // hearing it is suggestive; seeing it is damning
+            claim.Confidence = saw ? Mathf.Clamp(1f - dist / 40f, 0.55f, 1f) : 0.35f;
+            claim.Heat = 1f;
+            Ledger.Of(w.NpcName, MailStore.PlayerAddress).Nudge(trust: -3f, warmth: -3f, fear: 3f, resentment: 3f);
+            SocialSmoke.OnWitness(w.NpcName + (saw ? " [saw]" : " [heard]"), kind, claim.Confidence);
         }
     }
 
@@ -1556,6 +1661,270 @@ public partial class GameMode : Node3D
         Toast("FIRE ALARM. Everyone files to reception. You did this.", ToastKind.Chaos);
     }
 
+
+    // ---------------- interpersonal dynamics ----------------
+
+    /// <summary>Radius at which a confrontation actually lands, and at which bystanders overhear.</summary>
+    private const float ConfrontRange = 2.6f;
+    private const float WitnessRange = 9f;
+
+    /// <summary>
+    /// Drives the office terrarium: beliefs decay, NPCs form intents from what they believe,
+    /// walk them over to the person concerned, and have it out in front of whoever is nearby.
+    /// Every decision here is deterministic -- the LLM only gets asked to voice the outcome.
+    /// </summary>
+    private void TickInterpersonal(float dt)
+    {
+        if (!Started || Over) { SocialSmoke.Trace($"tick skipped: Started={Started} Over={Over}"); return; }
+        Ledger.Tick(dt);
+        SocialSmoke.StageCrime(this, dt);
+        SocialSmoke.Update(this, dt);
+
+        foreach (var npc in Npcs)
+        {
+            if (!npc.Awake || npc.Talking) continue;
+            var name = npc.NpcName;
+            _socialCooldown[name] = MathF.Max(0f, _socialCooldown.GetValueOrDefault(name) - dt);
+
+            // already executing a directive: steer, and fire the event on arrival
+            if (_activeDirective.TryGetValue(name, out var active))
+            {
+                if (AdvanceDirective(npc, active, dt)) _activeDirective.Remove(name);
+                continue;
+            }
+
+            if (_socialCooldown[name] > 0f) continue;
+
+            // pick the belief worth acting on, then turn it into location + action + event
+            SocialDirective? planned = null;
+            float bestUrgency = 0f;
+            var profile = Personas.ProfileFor(name);
+            foreach (var claim in Ledger.ClaimsHeldBy(name))
+            {
+                if (claim.Acted) continue;
+                var tensor = CarnageTensor.FromOpinion(Ledger.Of(name, claim.About), profile.Agreeableness, npc.Suspicion);
+                var d = DirectivePlanner.Plan(name, claim, tensor,
+                    profile.Agreeableness, profile.Conscientiousness, profile.Extraversion);
+                SocialSmoke.Trace($"{name} claim about {claim.About} conf={claim.Confidence:F2} heat={claim.Heat:F2} " +
+                    $"P={tensor.P:F2} G={tensor.G:F2} Phi={tensor.Phi:F2} -> {(d == null ? "NO PLAN" : d.Location + "/" + d.Event)}");
+                if (d == null || d.Urgency <= bestUrgency) continue;
+                planned = d;
+                bestUrgency = d.Urgency;
+            }
+            if (planned == null) continue;
+
+            _activeDirective[name] = planned;
+            SocialSmoke.OnDirective(name, planned);
+            _socialCooldown[name] = 40f;
+            npc.DirectiveZone = null;
+            npc.DirectiveTimer = 30f;
+            Toast(planned.Description, planned.Event is DirectiveEvent.Alert or DirectiveEvent.Report
+                ? ToastKind.Warn : ToastKind.Info);
+        }
+    }
+
+    /// <summary>
+    /// Two NPCs, one accusation, and an audience. The accused denies it unless they are
+    /// carrying the same belief about themselves being found out; either way both opinion
+    /// sheets move, and everyone in earshot walks away with a fresh rumour of their own.
+    /// </summary>
+    private void ResolveConfrontation(NpcBrain accuser, NpcBrain accused, Claim claim)
+    {
+        // low-agreeableness people brazen it out; the guilty-feeling and agreeable cave
+        var accusedProfile = Personas.ProfileFor(accused.NpcName);
+        bool denies = accusedProfile.Agreeableness < 0.75f || claim.Confidence < 0.6f;
+
+        Ledger.ResolveConfrontation(accuser.NpcName, accused.NpcName, claim, denies);
+
+        string headline = denies
+            ? $"{accused.NpcName} flatly denies it."
+            : $"{accused.NpcName} does not even bother denying it.";
+        Toast($"{accuser.NpcName} confronts {accused.NpcName}: {ClaimText.Describe(claim.Kind)}. {headline}", ToastKind.Chaos);
+
+        OfficeFeed.Insert(0, new StaffMemory
+        {
+            Subject = accused.NpcName,
+            Incident = $"confronted by {accuser.NpcName}",
+            Narrative = $"{accuser.NpcName} accused {accused.NpcName}: {ClaimText.Describe(claim.Kind)}. {headline}",
+            Location = accused.Pos,
+            Confidence = 80f,
+            Kind = MemoryKind.Rumor,
+            Shared = true,
+        });
+        while (OfficeFeed.Count > 24) OfficeFeed.RemoveAt(OfficeFeed.Count - 1);
+
+        // this is how a row becomes tomorrow's gossip, for free
+        foreach (var witness in Npcs)
+        {
+            if (witness == accuser || witness == accused || !witness.Awake) continue;
+            if (witness.Pos.DistanceTo(accused.Pos) > WitnessRange) continue;
+            Ledger.Tell(witness.NpcName, accused.NpcName, claim.Kind, accuser.NpcName, claim.Hops + 1);
+            Ledger.Of(witness.NpcName, accuser.NpcName).Nudge(fear: 0.8f, respect: denies ? -0.4f : 0.6f);
+        }
+
+        // the row is also an office-carnage incident: derive the tensor from what the accuser
+        // actually feels, and file the satirical log alongside the plain one
+        var report = SynthesizeCarnage(accuser, accused);
+        OfficeFeed.Insert(0, new StaffMemory
+        {
+            Subject = accuser.NpcName,
+            Incident = (string)report.Metadata["calculated_archetype"],
+            Narrative = report.Narrative,
+            Location = accuser.Pos,
+            Confidence = 70f,
+            Kind = MemoryKind.Rumor,
+            Shared = true,
+        });
+        while (OfficeFeed.Count > 24) OfficeFeed.RemoveAt(OfficeFeed.Count - 1);
+
+        // let the LLM voice the opening line, if it is configured
+        string context = Personas.ContextLine(accuser, this, accused.NpcName);
+        NpcChatService.ChatAsync(accuser,
+            $"You have just walked up to {accused.NpcName} because you believe {accused.NpcName} {ClaimText.Describe(claim.Kind)}. " +
+            $"You heard it from {claim.Source}. Say your opening line to their face. Do not narrate, just speak.",
+            context, "CONFRONT");
+    }
+
+
+    // ---------------- directive execution: location, action, event ----------------
+
+    private const float ArriveRange = 2.6f;
+    private const float EventWitnessRange = 9f;
+
+    private Vector3 DirectivePoint(NpcBrain n, SocialDirective d) => d.Location switch
+    {
+        DirectiveLocation.Stay => n.Pos,
+        DirectiveLocation.OwnDesk => n.HomePos,
+        DirectiveLocation.TargetPerson => d.TargetName == MailStore.PlayerAddress
+            ? (Player?.FeetPos ?? n.HomePos)
+            : Npcs.Find(x => x.NpcName == d.TargetName)?.Pos ?? n.HomePos,
+        DirectiveLocation.Security => Guard?.Pos ?? WorldData.GuardPosts[0],
+        DirectiveLocation.HumanResources => ZonePoint(n, "hr"),
+        DirectiveLocation.Breakroom => ZonePoint(n, "breakroom"),
+        DirectiveLocation.Printer => ZonePoint(n, "printer"),
+        DirectiveLocation.ServerRoom => ZonePoint(n, "server"),
+        DirectiveLocation.Reception => ZonePoint(n, "reception"),
+        DirectiveLocation.Closet => ZonePoint(n, "closet"),
+        _ => n.HomePos,
+    };
+
+    /// <summary>Steer an NPC along its directive; returns true once the event has fired.</summary>
+    private bool AdvanceDirective(NpcBrain n, SocialDirective d, float dt)
+    {
+        var point = DirectivePoint(n, d);
+        n.DirectiveZone = null;
+        n.DirectiveTarget = point;
+        n.DirectiveTimer = MathF.Max(n.DirectiveTimer, 2f);
+        n.DirectiveSpeedMul = d.SpeedMultiplier;
+
+        if (d.Location != DirectiveLocation.Stay && n.Pos.DistanceTo(point) > ArriveRange) return false;
+
+        n.DirectiveSpeedMul = 1f;
+        FireDirectiveEvent(n, d);
+        return true;
+    }
+
+    /// <summary>
+    /// Arrival. This is where a private belief becomes something the rest of the office can
+    /// see -- and, through PublishStimulus, something that sets other people off in turn.
+    /// </summary>
+    private void FireDirectiveEvent(NpcBrain n, SocialDirective d)
+    {
+        var target = Npcs.Find(x => x.NpcName == d.TargetName);
+        var claim = Ledger.ClaimsHeldBy(n.NpcName).FirstOrDefault(c => c.About == d.TargetName && !c.Acted);
+
+        switch (d.Event)
+        {
+            case DirectiveEvent.Confront when target != null && claim != null:
+                ResolveConfrontation(n, target, claim);
+                SocialSmoke.OnEvent(n.NpcName, d, Npcs.Count(w => w != n && w != target && w.Awake
+                    && w.Pos.DistanceTo(target.Pos) <= EventWitnessRange));
+                break;
+
+            case DirectiveEvent.Alert:
+                int picked = 0;
+                if (claim != null) claim.Acted = true;
+                Toast($"{n.NpcName} reaches security about {d.TargetName}.", ToastKind.Chaos);
+                // the cascade: everyone in earshot picks this up as their own belief
+                PublishStimulus(NpcStimulusKind.Rumor, n.Pos, 1.2f, false,
+                    $"{n.NpcName} is reporting {d.TargetName} to security.", radius: 16f, source: n);
+                foreach (var w in Npcs)
+                {
+                    if (w == n || !w.Awake || w.Pos.DistanceTo(n.Pos) > EventWitnessRange) continue;
+                    if (claim != null && Ledger.Tell(w.NpcName, d.TargetName, claim.Kind, n.NpcName, claim.Hops + 1) != null) picked++;
+                    Ledger.Of(w.NpcName, n.NpcName).Nudge(fear: 1.2f, trust: -0.4f);
+                }
+                SocialSmoke.OnEvent(n.NpcName, d, picked);
+                if (target != null) target.Suspicion = MathF.Min(100f, target.Suspicion + 25f);
+                break;
+
+            case DirectiveEvent.Report:
+                if (claim != null) claim.Acted = true;
+                Toast($"{n.NpcName} files a formal complaint about {d.TargetName}.", ToastKind.Warn);
+                SocialSmoke.OnEvent(n.NpcName, d, 0);
+                if (claim != null)
+                    FileAnonymousReport(d.TargetName, "MISCONDUCT",
+                        $"{n.NpcName} reports: {d.TargetName} {ClaimText.Describe(claim.Kind)}.");
+                break;
+
+            case DirectiveEvent.Gossip:
+                var ear = Npcs.Find(x => x.Awake && x != n && x.NpcName != d.TargetName
+                    && x.Pos.DistanceTo(n.Pos) < EventWitnessRange);
+                if (ear != null && claim != null)
+                {
+                    claim.Acted = true;
+                    Ledger.Tell(ear.NpcName, d.TargetName, claim.Kind, n.NpcName, claim.Hops + 1);
+                    Toast($"{n.NpcName} tells {ear.NpcName} about {d.TargetName}.", ToastKind.Info);
+                    SocialSmoke.OnEvent(n.NpcName, d, 1);
+                }
+                break;
+
+            case DirectiveEvent.Reconcile when target != null:
+                if (claim != null) claim.Acted = true;
+                Ledger.Of(n.NpcName, d.TargetName).Nudge(warmth: 2f, trust: 1.5f, resentment: -1.5f);
+                Ledger.Of(d.TargetName, n.NpcName).Nudge(warmth: 1.5f, trust: 1f);
+                Toast($"{n.NpcName} and {d.TargetName} sort it out.", ToastKind.Success);
+                SocialSmoke.OnEvent(n.NpcName, d, 0);
+                break;
+
+            case DirectiveEvent.AdjustStats:
+                if (claim != null) claim.Acted = true;
+                // stewing at your desk still costs you something
+                Ledger.Of(n.NpcName, d.TargetName).Nudge(resentment: 1.2f, warmth: -0.6f);
+                n.Suspicion = MathF.Min(100f, n.Suspicion + 4f);
+                SocialSmoke.OnEvent(n.NpcName, d, 0);
+                break;
+        }
+    }
+
+    /// <summary>Linguistic guardrails for how this NPC may speak to a given person right now.</summary>
+    public PromptVectorController.Constraints ConstraintsFor(NpcBrain n, string? target)
+    {
+        target ??= MailStore.PlayerAddress;
+        var opinion = Ledger.Of(n.NpcName, target);
+        var profile = Personas.ProfileFor(n.NpcName);
+        var tensor = CarnageTensor.FromOpinion(opinion, profile.Agreeableness, n.Suspicion);
+        return PromptVectorController.Build(Actor(n), target, tensor);
+    }
+
+    /// <summary>Build a carnage log from live ledger state -- no hand-fed tensors.</summary>
+    public CarnageReport SynthesizeCarnage(NpcBrain instigator, NpcBrain victim)
+    {
+        var opinion = Ledger.Of(instigator.NpcName, victim.NpcName);
+        var profile = Personas.ProfileFor(instigator.NpcName);
+        var tensor = CarnageTensor.FromOpinion(opinion, profile.Agreeableness, instigator.Suspicion);
+        var key = CarnageSynthesizer.CatalystFor(instigator.NpcName, victim.NpcName, tensor);
+        return _carnage.Synthesize(Actor(instigator), Actor(victim), key, tensor);
+    }
+
+    private static CarnageActor Actor(NpcBrain n)
+    {
+        var sheet = Personas.For(n.NpcName);
+        var profile = Personas.ProfileFor(n.NpcName);
+        return new CarnageActor(n.NpcName, n.Job, sheet.Quirk, sheet.Greeting,
+            profile.Agreeableness, profile.Extraversion, n.Suspicion);
+    }
+
     public void ApplyDirective(NpcBrain n, string zone, float seconds)
     {
         n.DirectiveZone = zone;
@@ -1566,8 +1935,13 @@ public partial class GameMode : Node3D
 
     public void OpenPortal()
     {
+        OpenPortalForComputer("company", null);
+    }
+
+    public void OpenPortalForComputer(string computerId, NpcBrain? owner)
+    {
         if (UIOpen || Portal == null) return;
-        Portal.Open();
+        Portal.OpenForComputer(computerId, owner);
         UIOpen = true;
     }
 

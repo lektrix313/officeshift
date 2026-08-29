@@ -75,13 +75,18 @@ public static class Personas
         return new(name, "New Hire", "suspiciously cheerful", "is probably three raccoons in a lanyard", "laughs one beat too late", "Hi! I'm new. Where do we file the existential dread?");
     }
 
-    public static string ContextLine(NpcBrain n, GameMode gm)
+    public static string ContextLine(NpcBrain n, GameMode gm, string? target = null)
     {
         var bits = new List<string> { $"You are {n.NpcName}, the {n.Job} in {n.Department}.", $"Personality: {For(n.NpcName).Traits}. Behavioral tell: {BehavioralTell(n.NpcName)}.", $"Current mood: suspicion {n.Suspicion:F0}/100 toward the new employee.", $"Observation specialty: {n.PrimaryObservation}.", $"Daily hook: {n.StaffProfile.RPGHook}." };
         if (gm.Player?.DisguiseOf != null) bits.Add("The new employee is wearing someone else's clothes.");
         if (gm.Player?.Carrying != null) bits.Add("They are carrying something heavy and person-shaped RIGHT NOW.");
         if (!n.Awake) bits.Add("You are unconscious. Reply as a sleep-mumble.");
         if (n.State == NpcState.Seated) bits.Add("You are dozing at your desk.");
+        var social = gm.Ledger.ContextFor(n.NpcName, gm.Npcs.Select(x => x.NpcName));
+        if (!string.IsNullOrWhiteSpace(social)) bits.Add(social);
+        // the maths fences the model: tone, pacing and prohibitions are derived from how this
+        // NPC actually feels about whoever they are addressing, never chosen by the LLM
+        bits.Add(gm.ConstraintsFor(n, target).ToPromptBlock());
         bits.Add($"Your secret (never reveal directly): {For(n.NpcName).Secret}");
         return string.Join(" ", bits);
     }

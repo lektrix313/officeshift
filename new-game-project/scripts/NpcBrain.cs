@@ -105,8 +105,15 @@ public partial class NpcBrain : Node
     public bool Talking { get; set; }
     public Vector3? DirectiveTarget { get; set; }
     public string? DirectiveZone { get; set; }
+    /// <summary>Set when the last stimulus was heard rather than witnessed: investigate, do not panic.</summary>
+    public bool HeardOnly { get; set; }
+    /// <summary>Pace multiplier while running a social directive: marching, running, skulking.</summary>
+    public float DirectiveSpeedMul { get; set; } = 1f;
     public float DirectiveTimer { get; set; }
     public Vector3 HomePos { get; set; }
+    public string DeskId { get; private set; } = "unassigned";
+    public string ComputerId => $"computer:{DeskId}";
+    public void AssignDesk(string deskId) => DeskId = string.IsNullOrWhiteSpace(deskId) ? "unassigned" : deskId;
     public float BathroomTimer { get; set; }
     public bool StinkReacted { get; set; }
     public bool Disposed { get; set; }
@@ -434,7 +441,7 @@ public partial class NpcBrain : Node
 
     private WorkdayState DefaultWorkdayState(float clock)
     {
-        float share = WorkProfile.DeskShare;
+        float share = System.MathF.Max(WorkProfile.DeskShare, 0.8f);
         float normalized = clock / Bal.ShiftSeconds;
         if (MovementStyle == WorkdayMovementStyle.SnackSeeker && normalized > 0.2f && normalized < 0.85f)
             return WorkdayState.StationaryUse;
@@ -1038,7 +1045,7 @@ public static class AiDirector
                     if (n.DirectiveTarget.HasValue)
                     {
                         bool arrived = n.StepToward(ctx.WorldRef, n.DirectiveTarget.Value, dt,
-                            n.Spec.Speed * n.WorkdaySpeedMultiplier);
+                            n.Spec.Speed * n.WorkdaySpeedMultiplier * n.DirectiveSpeedMul);
                         if (arrived)
                         {
                             n.Moving = false;
@@ -1291,21 +1298,33 @@ public static class AiDirector
             foreach (var n in npcs)
             {
                 if (n == ctx.Guard || !n.Awake) continue;
+                n.HeardOnly = false;
                 bool activeUser = n == stimulus.ActiveUser;
                 if (n == stimulus.Source && !activeUser) continue;
                 if (!activeUser && n.Pos.DistanceTo(stimulus.Position) > stimulus.Radius) continue;
-                if (stimulus.PlayerLed && stimulus.Kind == NpcStimulusKind.PlayerCrime &&
-                    n.Pos.DistanceTo(stimulus.Position) >= Bal.WitnessAutoSeeDist &&
-                    !(ctx.CanSee?.Invoke(n, stimulus.Position, 1f) ?? false)) continue;
+                if (stimulus.PlayerLed && stimulus.Kind == NpcStimulusKind.PlayerCrime)
+                {
+                    float crimeDist = n.Pos.DistanceTo(stimulus.Position);
+                    bool sawIt = crimeDist < Bal.WitnessAutoSeeDist
+                                 || (ctx.CanSee?.Invoke(n, stimulus.Position, 1f) ?? false);
+                    // heard but not seen: they know something happened over there, not what
+                    bool heardIt = crimeDist < Bal.CrimeHearDist;
+                    if (!sawIt && !heardIt) continue;
+                    if (!sawIt) n.HeardOnly = true;
+                }
                 if (!n.TryActivateStimulus(stimulus, Now)) continue;
 
-                switch (n.ReactionAction)
+                // heard but not seen: go and look, do not scream about a body you never saw
+                var reaction = n.HeardOnly && n.ReactionAction == NpcReactionAction.Panic
+                    ? NpcReactionAction.Investigate
+                    : n.ReactionAction;
+                switch (reaction)
                 {
                     case NpcReactionAction.Investigate:
-                        if (stimulus.EvidenceKind.HasValue && stimulus.EvidenceRef != null)
+                        if (!n.HeardOnly && stimulus.EvidenceKind.HasValue && stimulus.EvidenceRef != null)
                             n.StartCurious(stimulus.Position, stimulus.EvidenceRef, stimulus.EvidenceKind.Value);
                         else
-                            n.SetReactionDestination(stimulus.Position, n.ReactionAction);
+                            n.SetReactionDestination(stimulus.Position, reaction);
                         break;
                     case NpcReactionAction.Panic:
                         if (stimulus.EvidenceKind.HasValue && stimulus.EvidenceRef != null)

@@ -137,7 +137,11 @@ public partial class TalkOverlay : CanvasLayer
         AddLine($"You: {text}", Colors.White);
         _input.Text = "";
 
-        string context = Personas.ContextLine(npc, GameMode.Instance!);
+        var gm = GameMode.Instance!;
+        var claim = ClaimParser.Extract(text, gm.Npcs.Select(n => n.NpcName), npc.NpcName);
+        if (claim != null) gm.Ledger.Tell(npc.NpcName, claim.Value.About, claim.Value.Kind, MailStore.PlayerAddress);
+
+        string context = Personas.ContextLine(npc, gm);
         NpcChatService.ChatAsync(npc, text, context, "CHAT");
     }
 

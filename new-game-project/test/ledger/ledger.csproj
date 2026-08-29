@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <StartupObject>SocialLedgerGauntlet</StartupObject>
+    <NoWarn>CS8618</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Shims.cs" />
+    <Compile Include="Test.cs" />
+    <Compile Include="Capacity.cs" />
+    <Compile Include="../../scripts/SocialLedger.cs" />
+    <Compile Include="../../scripts/CarnageSynthesizer.cs" />
+    <Compile Include="../../scripts/SocialDirective.cs" />
+    <Compile Include="../../scripts/PromptVectorController.cs" />
+  </ItemGroup>
+</Project>

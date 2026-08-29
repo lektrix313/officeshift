@@ -6,3 +6,7 @@ shots/
 
 *.txt
 !README.md
+
+# standalone gauntlet harness build output
+test/**/bin/
+test/**/obj/

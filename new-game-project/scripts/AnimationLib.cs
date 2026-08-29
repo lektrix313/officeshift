@@ -53,18 +53,26 @@ public static class AnimationLib
             var instance = scene.Instantiate<Node>();
             if (instance == null) return;
 
-            // Find AnimationPlayer in the instantiated FBX scene
+            // Key clips by FILENAME, not by their internal name. Every Mixamo export names its
+            // animation "mixamo.com", so keying by internal name meant the first file won and the
+            // other eleven were silently discarded -- 12 FBX files produced 1 usable clip.
+            string fileKey = fbxPath[(fbxPath.LastIndexOf('/') + 1)..];
+            int dot = fileKey.LastIndexOf('.');
+            if (dot > 0) fileKey = fileKey[..dot];
+            fileKey = fileKey.Replace('/', ' ').Replace(':', ' ').Replace(',', ' ').Replace('[', ' ').Replace(']', ' ');
+
             var animPlayers = instance.FindChildren("*", "AnimationPlayer", true);
             if (animPlayers.Count > 0)
             {
                 var ap = (AnimationPlayer)animPlayers[0];
-                foreach (string clipName in ap.GetAnimationList())
+                var names = ap.GetAnimationList();
+                foreach (string clipName in names)
                 {
                     var anim = ap.GetAnimation(clipName);
-                    if (anim != null && !_clips.ContainsKey(clipName))
-                    {
-                        _clips[clipName] = anim;
-                    }
+                    if (anim == null) continue;
+                    // one clip per file is the Mixamo norm; disambiguate only when there are several
+                    string key = names.Length == 1 ? fileKey : $"{fileKey} {clipName}";
+                    if (!_clips.ContainsKey(key)) _clips[key] = anim;
                 }
             }
 
@@ -89,21 +97,42 @@ public static class AnimationLib
     /// Skips clips that already exist (model's own animations take priority).
     /// Returns the number of clips injected.
     /// </summary>
-    public static int InjectClips(AnimationPlayer target)
+    public static int InjectClips(AnimationPlayer target) => InjectClips(target, null);
+
+    /// <summary>
+    /// Injects the shared clips, retargeting them onto <paramref name="skeleton"/> when its bone
+    /// names differ from the source rig's. Without that step the clips install cleanly and
+    /// animate nothing.
+    /// </summary>
+    public static int InjectClips(AnimationPlayer target, Skeleton3D? skeleton)
     {
         if (target == null || _clips.Count == 0) return 0;
 
-        var lib = new AnimationLibrary();
+        string skeletonPath = "";
+        if (skeleton != null)
+        {
+            var root = target.GetNodeOrNull(target.RootNode) ?? target.GetParent();
+            if (root != null) skeletonPath = root.GetPathTo(skeleton);
+        }
+
+        var lib = target.HasAnimationLibrary("shared")
+            ? target.GetAnimationLibrary("shared")
+            : new AnimationLibrary();
         int injected = 0;
         foreach (var kvp in _clips)
         {
-            if (!target.HasAnimation(kvp.Key))
+            if (target.HasAnimation(kvp.Key)) continue;
+            var clip = kvp.Value;
+            if (skeleton != null && skeletonPath.Length > 0)
             {
-                lib.AddAnimation(kvp.Key, kvp.Value);
-                injected++;
+                var retargeted = AnimationRetarget.For(kvp.Key, kvp.Value, skeleton, skeletonPath);
+                if (retargeted == null) continue;   // nothing on this rig it could drive
+                clip = retargeted;
             }
+            lib.AddAnimation(kvp.Key, clip);
+            injected++;
         }
-        if (injected > 0)
+        if (injected > 0 && !target.HasAnimationLibrary("shared"))
             target.AddAnimationLibrary("shared", lib);
         return injected;
     }

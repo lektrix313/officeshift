@@ -248,6 +248,9 @@ public static class Bal
 
     // bonk witnesses
     public const float WitnessAutoSeeDist = 4f;   // within 4m they saw it regardless of LOS
+    // Sight is a 60-74 degree cone at ~10m, so a knockout behind someone's monitor went
+    // completely unnoticed. Violence is loud: this is how far it carries without line of sight.
+    public const float CrimeHearDist = 14f;
     public const float WitnessWakeSus = 100f;
     public const float WitnessSus = 70f;
 
